@@ -1,0 +1,25 @@
+{
+  "short_name": "Lumina",
+  "name": "Lumina: Growth & Journal",
+  "description": "A holistic self-improvement planner and journaling application powered by AI.",
+  "icons": [
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3237/3237472.png",
+      "type": "image/png",
+      "sizes": "192x192",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "https://cdn-icons-png.flaticon.com/512/3237/3237472.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "theme_color": "#ffffff",
+  "background_color": "#f8fafc"
+}
