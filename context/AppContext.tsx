@@ -173,7 +173,17 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     ms_100: 'Absolute mastery today!',
     ms_idle: 'One small win is all it takes to start. Ready when you are.',
     ms_fresh: 'Fresh Start',
-    flexible_focus: 'Flexible Focus'
+    flexible_focus: 'Flexible Focus',
+    hall_of_fame: 'Hall of Fame',
+    recalibrate: 'Recalibrate',
+    recalibrate_desc: 'Life happened! How should we adjust this goal?',
+    extend_deadline: 'Extend Deadline',
+    move_someday: 'Someday / Maybe',
+    overdue_label: 'Needs Review',
+    active_focus: 'Active Focus',
+    completed_date: 'Completed on',
+    no_overdue: 'No goals currently need review.',
+    no_archive: 'Your Hall of Fame is waiting for its first trophy.'
   },
   Spanish: {
     home: 'Inicio', goals: 'Metas', journal: 'Diario', grow: 'Crecimiento', community: 'Comunidad', profile: 'Perfil', 
@@ -279,7 +289,17 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     ms_100: '¡Maestría absoluta hoy!',
     ms_idle: 'Un pequeño paso es todo lo que necesitas para empezar. Listo cuando tú lo estés.',
     ms_fresh: 'Nuevo Comienzo',
-    flexible_focus: 'Enfoque Flexible'
+    flexible_focus: 'Enфоque Flexible',
+    hall_of_fame: 'Salón de la Fama',
+    recalibrate: 'Recalibrar',
+    recalibrate_desc: '¡La vida pasa! ¿Cómo ajustamos esta meta?',
+    extend_deadline: 'Extender Plazo',
+    move_someday: 'Algún día / Quizás',
+    overdue_label: 'Necesita Revisión',
+    active_focus: 'Enfoque Activo',
+    completed_date: 'Completado el',
+    no_overdue: 'No hay metas que necesiten revisión.',
+    no_archive: 'Tu Salón de la Fama espera su primer trofeo.'
   },
   French: {
     home: 'Accueil', goals: 'Objectifs', journal: 'Journal', grow: 'Grandir', community: 'Communauté', profile: 'Profil', 
@@ -385,7 +405,17 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     ms_100: 'Maîtrise absolue aujourd\'hui !',
     ms_idle: 'Une seule petite victoire suffit pour commencer. Prêt quand tu l\'es.',
     ms_fresh: 'Nouveau Départ',
-    flexible_focus: 'Focus Flexible'
+    flexible_focus: 'Focus Flexible',
+    hall_of_fame: 'Panthéon',
+    recalibrate: 'Recalibrer',
+    recalibrate_desc: 'La vie arrive ! Comment ajuster cet objectif ?',
+    extend_deadline: 'Prolonger',
+    move_someday: 'Plus tard / Peut-être',
+    overdue_label: 'À réviser',
+    active_focus: 'Focus Actif',
+    completed_date: 'Terminé le',
+    no_overdue: 'Aucun objectif à réviser.',
+    no_archive: 'Votre Panthéon attend son premier trophée.'
   },
   German: {
     home: 'Home', goals: 'Ziele', journal: 'Journal', grow: 'Wachsen', community: 'Community', profile: 'Profil', 
@@ -485,13 +515,23 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     momentum_insight: 'Impuls-Botschaft',
     momentum_title: 'Dein Schwung',
     ms_20: 'Der erste Funke. Weiter so!',
-    ms_40: 'Steigende Energie. Du bist gut dabei!',
-    ms_60: 'Toller Fluss! Schon über die Hälfte.',
-    ms_80: 'Höchstleistung! Fast geschafft.',
+    ms_40: 'Energie im Anstieg. Weiter so!',
+    ms_60: 'Super Fluss! Mehr als die Hälfte.',
+    ms_80: 'Fast geschafft! Höchstleistung.',
     ms_100: 'Absolute Meisterschaft heute!',
-    ms_idle: 'Ein kleiner Erfolg reicht für den Anfang. Bereit, wenn du es bist.',
-    ms_fresh: 'Neuanfang',
-    flexible_focus: 'Flexibler Fokus'
+    ms_idle: 'Ein kleiner Sieg genügt für den Anfang. Bereit, wenn du es bist.',
+    ms_fresh: 'Neustart',
+    flexible_focus: 'Flexibler Fokus',
+    hall_of_fame: 'Ruhmeshalle',
+    recalibrate: 'Rekalibrieren',
+    recalibrate_desc: 'Das Leben passiert! Wie passen wir dieses Ziel an?',
+    extend_deadline: 'Frist verlängern',
+    move_someday: 'Irgendwann / Vielleicht',
+    overdue_label: 'Prüfen',
+    active_focus: 'Aktiver Fokus',
+    completed_date: 'Abgeschlossen am',
+    no_overdue: 'Keine Ziele müssen geprüft werden.',
+    no_archive: 'Deine Ruhmeshalle wartet auf die erste Trophäe.'
   },
   Ukrainian: {
     home: 'Головна', goals: 'Цілі', journal: 'Щоденник', grow: 'Ріст', community: 'Спільнота', profile: 'Профіль', 
@@ -567,7 +607,7 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     act_work: 'Робота', act_exercise: 'Спорт', act_reading: 'Читання', act_family: 'Сім\'я', act_friends: 'Друзі', act_nature: 'Природа', act_creativity: 'Творчість', act_relax: 'Відпочинок', act_chores: 'Справи', act_learn: 'Навчання',
     remove_tag_confirm: 'Видалити тег?', default_prompt: 'Як сьогоднішній день відображає вашу глибинну мету?',
     reflect_on_day: 'Рефлексуйте.', import_success: 'Відновлено!', import_error: 'Помилка файлу.',
-    backup_status: 'Бекап', backup_ok: 'Актуально', backup_needed: 'Рекомендовано',
+    backup_status: 'Відновлення', backup_ok: 'Актуально', backup_needed: 'Рекомендовано',
     persistence_on: 'Сховище активне', persistence_off: 'Увімкнути сховище',
     update_detected: 'Оновлено!', update_note: 'Нові функції.',
     ai_friction_title: 'Мудрість Gemini',
@@ -597,7 +637,17 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     ms_100: 'Абсолютна майстерність сьогодні!',
     ms_idle: 'Достатньо однієї маленької перемоги для старту. Готові, коли і ви.',
     ms_fresh: 'Новий Початок',
-    flexible_focus: 'Гнучкий Фокус'
+    flexible_focus: 'Гнучкий Фокус',
+    hall_of_fame: 'Зала Слави',
+    recalibrate: 'Переглянути',
+    recalibrate_desc: 'Життя бентежне! Як ми змінимо цю ціль?',
+    extend_deadline: 'Продовжити термін',
+    move_someday: 'Колись / Можливо',
+    overdue_label: 'Потребує уваги',
+    active_focus: 'Активний Фокус',
+    completed_date: 'Завершено',
+    no_overdue: 'Немає цілей, що потребують уваги.',
+    no_archive: 'Ваша Зала Слави чекає на перший трофей.'
   }
 };
 
@@ -712,7 +762,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     ...prev,
     journalEntries: prev.journalEntries.map(e => e.id === id ? { ...e, ...updates } : e)
   }));
-  // Fix: Removed reference to non-existent 'entry' variable. Simply filter prev.journalEntries.
   const deleteJournalEntry = (id: string) => setUser(prev => ({ ...prev, journalEntries: prev.journalEntries.filter(e => e.id !== id) }));
 
   /**
