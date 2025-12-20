@@ -35,7 +35,7 @@
             animation: {
               'pop-haptic': 'pop-haptic 0.15s cubic-bezier(0.175, 0.885, 0.32, 1) forwards',
               'check-draw': 'check-draw 0.3s cubic-bezier(0.65, 0, 0.35, 1) forwards',
-              'sparkle': 'sparkle 1.5s ease-in-out infinite',
+              'sparkle': 'sparkle 2s ease-in-out infinite',
               'float': 'float 3s ease-in-out infinite',
               'reward-pulse': 'reward-pulse 2s infinite',
               'pulse-slow': 'pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
@@ -51,8 +51,9 @@
                 '100%': { transform: 'scale(1) translateY(0)', opacity: '1' },
               },
               'sparkle': {
-                '0%, 100%': { opacity: 0, transform: 'scale(0) rotate(0deg)' },
-                '50%': { opacity: 1, transform: 'scale(1.2) rotate(180deg)' },
+                /* Removed rotation and aggressive scaling for a cleaner, static feel */
+                '0%, 100%': { opacity: 1, transform: 'scale(1)' },
+                '50%': { opacity: 0.8, transform: 'scale(1.1)' },
               },
               'float': {
                 '0%, 100%': { transform: 'translateY(0)' },

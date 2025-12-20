@@ -1,10 +1,16 @@
+
 import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
 import { UserState, Goal, Habit, JournalEntry, ThemeColor, AppLanguage, JournalTemplate, ServiceName, AppNotification, Resource, LearningModule, Quiz, Post, CommunityEvent, Comment, NotificationType, GoalCategory, DailyBriefing } from '../types';
 
-// Exported to be accessible in other files (e.g., Profile.tsx)
+/**
+ * APP_VERSION: Used for tracking compatibility across local storage updates.
+ */
 export const APP_VERSION = '1.2.0';
 
-// Theme definitions for use throughout the app
+/**
+ * THEMES: A configuration object defining the visual identity for each accent color.
+ * These are used dynamically throughout the app via the themeClasses object.
+ */
 export const THEMES: Record<ThemeColor, { name: string, primary: string, secondary: string, text: string, ring: string, gradient: string, shadow: string, border: string }> = {
   indigo: {
     name: 'theme_royal',
@@ -58,6 +64,10 @@ export const THEMES: Record<ThemeColor, { name: string, primary: string, seconda
   }
 };
 
+/**
+ * TRANSLATIONS: The core localization dictionary for the app.
+ * All UI text must be fetched from here using the t('key') function.
+ */
 export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
   English: {
     home: 'Home', goals: 'Goals', journal: 'Journal', grow: 'Grow', community: 'Community', profile: 'Profile', 
@@ -162,14 +172,15 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     ms_80: 'Peak performance! Almost finished.',
     ms_100: 'Absolute mastery today!',
     ms_idle: 'One small win is all it takes to start. Ready when you are.',
-    ms_fresh: 'Fresh Start'
+    ms_fresh: 'Fresh Start',
+    flexible_focus: 'Flexible Focus'
   },
   Spanish: {
     home: 'Inicio', goals: 'Metas', journal: 'Diario', grow: 'Crecimiento', community: 'Comunidad', profile: 'Perfil', 
     settings: 'Ajustes', dark_mode: 'Tema Oscuro', language: 'Idioma', appearance: 'Apariencia', 
     identity: 'Identidad', insights: 'Análisis', focus: 'Enfoque', daily_wisdom: 'Sabiduría Diaria',
     good_morning: 'Buenos días', good_afternoon: 'Buenas tardes', good_evening: 'Buenas noches',
-    no_habits: 'Sin hábitos aún.', new_goal: 'Nueva Meta', start_routine: 'Iniciar Rutina',
+    no_habits: 'Sin hábitos activos.', new_goal: 'Nueva Meta', start_routine: 'Iniciar Rutina',
     save_entry: 'Guardar entrada', update_goal: 'Actualizar Meta', write_entry: 'Escribir entrada', edit_entry: 'Editar entrada', export_data: 'Exportar datos', 
     import_data: 'Restaurar Datos', delete_account: 'Eliminar cuenta', privacy_policy: 'Privacidad', ai_connection: 'Conexión IA',
     security: 'Seguridad', app_lock: 'Bloqueo de App', incognito: 'Modo Incógnito',
@@ -198,7 +209,7 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     ai_suggestion: 'Sugerencia IA', time_of_day: 'Momento del día', reminder: 'Recordatorio',
     update_habit: 'Actualizar Hábito', create_habit: 'Crear Hábito', remove_habit_confirm: '¿Eliminar hábito?',
     daily_reflection: 'Reflexión Diaria', curating_question: 'Preparando tu pregunta...',
-    search_memories: 'Buscar recuerdos...', delete_entry_confirm: '¿Eliminar entrada?', reflect_grow: 'Reflexiona y crece.',
+    search_memories: 'Buscar recuerdos...', delete_entry_confirm: '¿Eliminar entrada?', reflect_grow: 'Reflejiona y crece.',
     no_templates_msg: 'Sin plantillas', link_goal_btn: 'Meta', no_goal: 'Sin Meta',
     write_thoughts: 'Escribe tus pensamientos...', busy_label: '¿Qué te mantuvo ocupado?', 
     tag_name_ph: 'Etiqueta', reflecting_msg: 'Reflejando...', 
@@ -248,7 +259,7 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     earlier_today: 'Más temprano',
     upcoming_today: 'Próximamente',
     flexible_status: 'Flexible',
-    current_status: 'Activo',
+    current_status: 'Active',
     routine_morning: 'Ritual Matutino',
     routine_afternoon: 'Flujo del Día',
     routine_evening: 'Cierre del Día',
@@ -267,7 +278,8 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     ms_80: '¡Máximo rendimiento! Casi terminas.',
     ms_100: '¡Maestría absoluta hoy!',
     ms_idle: 'Un pequeño paso es todo lo que necesitas para empezar. Listo cuando tú lo estés.',
-    ms_fresh: 'Nuevo Comienzo'
+    ms_fresh: 'Nuevo Comienzo',
+    flexible_focus: 'Enfoque Flexible'
   },
   French: {
     home: 'Accueil', goals: 'Objectifs', journal: 'Journal', grow: 'Grandir', community: 'Communauté', profile: 'Profil', 
@@ -307,14 +319,14 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     no_templates_msg: 'Aucun modèle', link_goal_btn: 'Lier', no_goal: 'Aucun Objectif',
     write_thoughts: 'Écrivez vos pensées...', busy_label: 'Occupations du jour ?', 
     tag_name_ph: 'Nom du tag', reflecting_msg: 'Réflexion...', 
-    progress_tracking: 'Suivi des Progrès', week: 'Semaine', month: 'Mois', 
+    progress_tracking: 'Suivi des Progrès', week: 'Semaine', month: 'Mes', 
     habit_consistency: 'Consistance', completion_rate: 'Taux de Succès',
     emotional_journey: 'Voyage Émotionnel', core_drivers: 'Moteurs Clés',
     habit_rate: 'Taux Habitudes', entries: 'Entrées', goals_done: 'Objectifs Finis',
     grow_explore: 'Grandir & Explorer', library: 'Bibliothèque', learn_tab: 'Apprendre', quizzes_tab: 'Quiz',
     your_modules: 'Vos Modules', continue_btn: 'Continuer', start_module: 'Démarrer',
     expert_masterclass: 'Masterclass Expert', community_tab: 'Communauté', feed_tab: 'Fil', 
-    events_tab: 'Événements', translate_btn: 'Traduire', original_btn: 'Original',
+    events_tab: 'Événements', translate_btn: 'Traidure', original_btn: 'Original',
     anonymous: 'Anonyme', comment_anon_ph: 'Commenter anonymement...', add_comment_ph: 'Ajouter un commentaire...',
     global_challenge: 'Défi Mondial', register_now: 'S\'inscrire', already_joined: 'Déjà inscrit ✓',
     view_all: 'Tout voir', snooze_btn: 'Plus tard', done_btn: 'Fait',
@@ -334,7 +346,7 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     choose_path_title: 'Choisir un Chemin', choose_path_subtitle: 'COMMENCEZ VOTRE PROCHAIN CHAPITRE', create_custom_goal: 'Objectif Personnalisé', create_custom_desc: 'Définissez votre destin.',
     or_try_template: 'OU ESSAYEZ UN MODÈLE', refine_vision: 'Affinez votre vision',
     cat_health: 'Santé', cat_career: 'Carrière', cat_personal: 'Personnel', cat_financial: 'Finance', cat_learning: 'Apprentissage', cat_relationships: 'Relations', cat_creativity: 'Créativité',
-    tpl_read_title: 'Lire 12 Livres', tpl_read_desc: 'Élargir les connaissances un livre par mois.',
+    tpl_read_title: 'Lire 12 Libros', tpl_read_desc: 'Élargir les connaissances un livre par mois.',
     tpl_run_title: 'Courir un 5K', tpl_run_desc: 'S\'entraîner pour courir 5km sans s\'arrêter.',
     tpl_save_title: 'Économiser 1 000$', tpl_save_desc: 'Créer un fonds d\'urgence.',
     tpl_lang_title: 'Apprendre une Langue', tpl_lang_desc: 'Pratiquer quotidiennement pour la fluidité.',
@@ -368,11 +380,12 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     momentum_title: 'Votre Élan',
     ms_20: 'La première étincelle. Continuez !',
     ms_40: 'Énergie montante. Vous êtes sur une lancée !',
-    ms_60: 'Super flux ! Déjà plus de la moitié.',
+    ms_60: 'Super flux ! Dejà plus de la moitié.',
     ms_80: 'Performance de pointe ! Presque fini.',
     ms_100: 'Maîtrise absolue aujourd\'hui !',
     ms_idle: 'Une seule petite victoire suffit pour commencer. Prêt quand tu l\'es.',
-    ms_fresh: 'Nouveau Départ'
+    ms_fresh: 'Nouveau Départ',
+    flexible_focus: 'Focus Flexible'
   },
   German: {
     home: 'Home', goals: 'Ziele', journal: 'Journal', grow: 'Wachsen', community: 'Community', profile: 'Profil', 
@@ -477,7 +490,8 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     ms_80: 'Höchstleistung! Fast geschafft.',
     ms_100: 'Absolute Meisterschaft heute!',
     ms_idle: 'Ein kleiner Erfolg reicht für den Anfang. Bereit, wenn du es bist.',
-    ms_fresh: 'Neuanfang'
+    ms_fresh: 'Neuanfang',
+    flexible_focus: 'Flexibler Fokus'
   },
   Ukrainian: {
     home: 'Головна', goals: 'Цілі', journal: 'Щоденник', grow: 'Ріст', community: 'Спільнота', profile: 'Профіль', 
@@ -582,14 +596,21 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     ms_80: 'Пікова продуктивність! Майже фініш.',
     ms_100: 'Абсолютна майстерність сьогодні!',
     ms_idle: 'Достатньо однієї маленької перемоги для старту. Готові, коли і ви.',
-    ms_fresh: 'Новий Початок'
+    ms_fresh: 'Новий Початок',
+    flexible_focus: 'Гнучкий Фокус'
   }
 };
 
 const AppContext = createContext<any>(null);
 
-// Implementation of the AppProvider and useApp hook
+/**
+ * AppProvider: The central state container for the entire application.
+ * It handles data persistence, global themes, and core CRUD logic.
+ */
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
+  /**
+   * user state: Loaded from localStorage to ensure data survives refreshes.
+   */
   const [user, setUser] = useState<UserState>(() => {
     const saved = localStorage.getItem('lumina_user_v1');
     return saved ? JSON.parse(saved) : {
@@ -630,15 +651,31 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [notifications, setNotifications] = useState<AppNotification[]>([]);
   const [isPersistent, setIsPersistent] = useState(false);
 
+  /**
+   * Global Synchronization Effect:
+   * 1. Persists user state to LocalStorage.
+   * 2. Synchronizes the 'dark' class with the document root for Tailwind dark mode.
+   */
   useEffect(() => {
     localStorage.setItem('lumina_user_v1', JSON.stringify(user));
-  }, [user]);
+    if (user.theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [user.theme, user]);
 
   const t = (key: string) => TRANSLATIONS[user.language][key] || TRANSLATIONS.English[key] || key;
   const themeClasses = THEMES[user.themeColor];
 
+  /**
+   * Preference Management
+   */
   const updateUserPreferences = (prefs: Partial<UserState>) => setUser(prev => ({ ...prev, ...prefs }));
   
+  /**
+   * Goal CRUD logic
+   */
   const addGoal = (goal: Goal) => setUser(prev => ({ ...prev, goals: [...prev.goals, goal] }));
   const updateGoal = (id: string, updates: Partial<Goal>) => setUser(prev => ({
     ...prev,
@@ -646,6 +683,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }));
   const deleteGoal = (id: string) => setUser(prev => ({ ...prev, goals: prev.goals.filter(g => g.id !== id) }));
 
+  /**
+   * Habit CRUD and completion logic
+   */
   const addHabit = (habit: Habit) => setUser(prev => ({ ...prev, habits: [...prev.habits, habit] }));
   const updateHabit = (id: string, updates: Partial<Habit>) => setUser(prev => ({
     ...prev,
@@ -664,13 +704,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     })
   }));
 
+  /**
+   * Journal CRUD logic
+   */
   const addJournalEntry = (entry: JournalEntry) => setUser(prev => ({ ...prev, journalEntries: [entry, ...prev.journalEntries] }));
   const updateJournalEntry = (id: string, updates: Partial<JournalEntry>) => setUser(prev => ({
     ...prev,
     journalEntries: prev.journalEntries.map(e => e.id === id ? { ...e, ...updates } : e)
   }));
+  // Fix: Removed reference to non-existent 'entry' variable. Simply filter prev.journalEntries.
   const deleteJournalEntry = (id: string) => setUser(prev => ({ ...prev, journalEntries: prev.journalEntries.filter(e => e.id !== id) }));
 
+  /**
+   * Security and Pin logic
+   */
   const setPinCode = (pin: string | null) => setUser(prev => ({
     ...prev,
     securitySettings: { ...prev.securitySettings, pinCode: pin }
@@ -684,6 +731,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return false;
   };
 
+  /**
+   * In-App Notification Engine
+   */
   const triggerNotification = (title: string, message: string, type: NotificationType = 'system') => {
     const id = Date.now().toString();
     setNotifications(prev => [...prev, { id, title, message, type, timestamp: Date.now() }]);
@@ -692,6 +742,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const dismissNotification = (id: string) => setNotifications(prev => prev.filter(n => n.id !== id));
   const snoozeNotification = (id: string) => dismissNotification(id);
 
+  /**
+   * Data Portability logic (Export/Import)
+   */
   const exportData = () => {
     const dataStr = JSON.stringify(user);
     const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
@@ -717,6 +770,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     window.location.reload();
   };
 
+  /**
+   * Browser Storage Management
+   */
   const requestPersistence = async () => {
     if (navigator.storage && (navigator.storage as any).persist) {
       const persistent = await (navigator.storage as any).persist();
@@ -731,6 +787,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     savedResourceIds: prev.savedResourceIds.includes(id) ? prev.savedResourceIds.filter(rid => rid !== id) : [...prev.savedResourceIds, id]
   }));
 
+  /**
+   * Community/Social logic
+   */
   const addPost = (post: Post) => setUser(prev => ({ ...prev, posts: [post, ...prev.posts] }));
   const likePost = (postId: string) => setUser(prev => ({
     ...prev,
@@ -781,7 +840,9 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
 
-// Hook for consuming the application context
+/**
+ * useApp hook: Provides convenient access to the global application state.
+ */
 export const useApp = () => {
   const context = useContext(AppContext);
   if (!context) throw new Error('useApp must be used within AppProvider');

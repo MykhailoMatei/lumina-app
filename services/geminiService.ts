@@ -2,40 +2,27 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { Goal, AppLanguage, Habit, JournalEntry, DailyBriefing } from "../types";
 
-// Explicitly declare process to prevent ReferenceErrors in environments where it's not shimmed
-declare const process: any;
-
+/**
+ * Model Selection:
+ * - gemini-3-pro-preview: Used for complex reasoning (Daily Briefings, Goal Breakdown).
+ * - gemini-3-flash-preview: Used for fast text tasks (Local translations, Prompts).
+ */
 const TEXT_MODEL_COMPLEX = 'gemini-3-pro-preview';
 const TEXT_MODEL_FAST = 'gemini-3-flash-preview';
 
 /**
- * Safely retrieves the API Key from the environment.
- */
-const getApiKey = (): string => {
-  try {
-    // Check various common locations for the key
-    const key = (typeof process !== 'undefined' && process.env?.API_KEY) || 
-                (window as any).API_KEY || 
-                "";
-    return key.trim();
-  } catch (e) {
-    return "";
-  }
-};
-
-/**
- * Helper to get a fresh AI instance.
+ * Helper to get a fresh AI instance using the environment API key strictly.
  */
 const getAiClient = () => {
-  const key = getApiKey();
-  if (!key) {
+  if (!process.env.API_KEY) {
     throw new Error("API_KEY_MISSING");
   }
-  return new GoogleGenAI({ apiKey: key });
+  return new GoogleGenAI({ apiKey: process.env.API_KEY });
 };
 
 /**
  * Enhanced localization instruction.
+ * This ensures Gemini respects the user's language choice throughout the UI.
  */
 const getLangInstr = (lang: AppLanguage) => 
   `CRITICAL LANGUAGE REQUIREMENT: You are a professional, native-level writer in ${lang}. 
@@ -45,6 +32,9 @@ const getLangInstr = (lang: AppLanguage) =>
    Even if the input context (goals/habits) is in English, your output MUST be 100% in ${lang}. 
    Forbidden: Motivation, Focus, Tip, and Journal Prompt fields must never contain English text.`;
 
+/**
+ * Verifies that the API key is valid and the model is reachable.
+ */
 export const testApiConnection = async (): Promise<{success: boolean, message: string}> => {
   try {
     const ai = getAiClient();
@@ -57,13 +47,16 @@ export const testApiConnection = async (): Promise<{success: boolean, message: s
     if (error.message === "API_KEY_MISSING") {
       return { 
         success: false, 
-        message: "API Key is missing. Please add your Gemini API Key to your environment variables or .env file and restart the server." 
+        message: "API Key is missing. Please add your Gemini API Key to your environment variables." 
       };
     }
     return { success: false, message: `Connection Error: ${error.message}` };
   }
 };
 
+/**
+ * Localization helper for social posts in the Community tab.
+ */
 export const translateContent = async (title: string, content: string, targetLang: AppLanguage): Promise<{title: string, content: string}> => {
   const prompt = `${getLangInstr(targetLang)} 
   Translate and localize this social media post.
@@ -77,6 +70,8 @@ export const translateContent = async (title: string, content: string, targetLan
       model: TEXT_MODEL_FAST,
       contents: prompt,
       config: {
+        maxOutputTokens: 1000,
+        thinkingConfig: { thinkingBudget: 0 },
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
@@ -95,6 +90,46 @@ export const translateContent = async (title: string, content: string, targetLan
   }
 };
 
+/**
+ * Fast translation for Daily Briefing to ensure smooth language switching.
+ */
+export const translateDailyBriefing = async (briefing: DailyBriefing, targetLang: AppLanguage): Promise<DailyBriefing> => {
+  const prompt = `${getLangInstr(targetLang)} 
+  Translate this Daily Briefing JSON object while maintaining the tone and formatting.
+  JSON to translate: ${JSON.stringify(briefing)}
+  Return exactly the same JSON structure in ${targetLang}.`;
+
+  try {
+    const ai = getAiClient();
+    const response = await ai.models.generateContent({
+      model: TEXT_MODEL_FAST,
+      contents: prompt,
+      config: {
+        maxOutputTokens: 1000,
+        thinkingConfig: { thinkingBudget: 0 },
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            motivation: { type: Type.STRING },
+            focus: { type: Type.STRING },
+            tip: { type: Type.STRING },
+            journalPrompt: { type: Type.STRING }
+          },
+          required: ["motivation", "focus", "tip", "journalPrompt"]
+        }
+      }
+    });
+    return JSON.parse(response.text || "{}");
+  } catch (error) {
+    console.error("Briefing translation failed", error);
+    return briefing;
+  }
+};
+
+/**
+ * Generates a specific daily reflection question based on user's current goals.
+ */
 export const generateDailyPrompt = async (goals: Goal[], lang: AppLanguage): Promise<string> => {
   const goalSummary = goals.map(g => g.title).join(", ");
   const prompt = `${getLangInstr(lang)} Write ONE deeply personal journaling prompt (a single question) for a user working on: ${goalSummary}. Return JSON with key "prompt". Output strictly in ${lang}.`;
@@ -128,6 +163,9 @@ export const generateDailyPrompt = async (goals: Goal[], lang: AppLanguage): Pro
   } catch { return fallbacks[lang] || fallbacks.English; }
 };
 
+/**
+ * Provides psychological feedback on a journal entry.
+ */
 export const generateEntryInsight = async (entry: string, lang: AppLanguage): Promise<string> => {
   const prompt = `${getLangInstr(lang)} 
   The user wrote: "${entry}"
@@ -135,7 +173,7 @@ export const generateEntryInsight = async (entry: string, lang: AppLanguage): Pr
   
   const fallbacks: Record<AppLanguage, string> = {
     English: "Keep growing.",
-    French: "Continuez à grandir.",
+    French: "Continuez à progresser.",
     German: "Wachse weiter.",
     Ukrainian: "Продовжуй розвиватися.",
     Spanish: "Sigue creciendo."
@@ -162,6 +200,10 @@ export const generateEntryInsight = async (entry: string, lang: AppLanguage): Pr
   } catch { return fallbacks[lang] || fallbacks.English; }
 };
 
+/**
+ * Creates the central "Daily Briefing" shown on the Dashboard.
+ * This is the most complex prompt as it synthesizes goals, habits, and mood.
+ */
 export const generateDailyBriefing = async (
   name: string, 
   goals: Goal[], 
@@ -194,9 +236,7 @@ export const generateDailyBriefing = async (
     1. Motivation: Create a powerful philosophical mantra in ${lang}. 
     2. Focus: Identify one central theme for today in ${lang}.
     3. Micro Tip: Suggest one actionable small step in ${lang}.
-    4. Journal Prompt: Create ONE specific, open-ended question for their journal in ${lang}.
-    
-    CRITICAL: YOU MUST NOT LEAVE ANY TEXT IN ENGLISH. EVERYTHING IN THE OUTPUT JSON MUST BE WRITTEN IN ${lang}.`;
+    4. Journal Prompt: Create ONE specific, open-ended question for their journal in ${lang}.`;
 
     const fallbacks: Record<AppLanguage, DailyBriefing> = {
       English: { motivation: "Your potential is infinite, nurtured by the small steps you take today.", focus: "Consistency", tip: "Take one small step towards your most daunting goal.", journalPrompt: "How does today reflect your deeper purpose?" },
@@ -216,22 +256,10 @@ export const generateDailyBriefing = async (
                 responseSchema: {
                     type: Type.OBJECT,
                     properties: {
-                        motivation: { 
-                          type: Type.STRING, 
-                          description: `A powerful mantra written strictly in ${lang}` 
-                        },
-                        focus: { 
-                          type: Type.STRING,
-                          description: `A specific growth theme written strictly in ${lang}` 
-                        },
-                        tip: { 
-                          type: Type.STRING,
-                          description: `A localized micro-action in ${lang}`
-                        },
-                        journal_prompt: {
-                          type: Type.STRING,
-                          description: `A deeply personal journaling question in ${lang}`
-                        }
+                        motivation: { type: Type.STRING },
+                        focus: { type: Type.STRING },
+                        tip: { type: Type.STRING },
+                        journal_prompt: { type: Type.STRING }
                     },
                     required: ["motivation", "focus", "tip", "journal_prompt"]
                 }
@@ -250,6 +278,9 @@ export const generateDailyBriefing = async (
     }
 };
 
+/**
+ * Goal Strategist: Breaks a big goal into smaller milestones.
+ */
 export const generateMilestonesForGoal = async (goalTitle: string, lang: AppLanguage): Promise<string[]> => {
   const prompt = `${getLangInstr(lang)} Break the goal "${goalTitle}" into 5 milestones. Return a JSON array of strings in ${lang}.`;
   try {
@@ -261,10 +292,7 @@ export const generateMilestonesForGoal = async (goalTitle: string, lang: AppLang
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.ARRAY,
-          items: { 
-            type: Type.STRING,
-            description: `A localized milestone title in ${lang}`
-          }
+          items: { type: Type.STRING }
         }
       }
     });
@@ -272,6 +300,9 @@ export const generateMilestonesForGoal = async (goalTitle: string, lang: AppLang
   } catch { return []; }
 };
 
+/**
+ * Habit Recommender: Suggests actionable habits for a specific goal.
+ */
 export const suggestHabitsFromGoals = async (goalTitle: string, lang: AppLanguage): Promise<{title: string, description: string, timeOfDay: string}[]> => {
     const prompt = `${getLangInstr(lang)} Suggest 3 daily habits to achieve: "${goalTitle}". Output JSON array of objects with title, description, timeOfDay in ${lang}.`;
     try {
@@ -286,18 +317,9 @@ export const suggestHabitsFromGoals = async (goalTitle: string, lang: AppLanguag
             items: { 
                type: Type.OBJECT,
                properties: {
-                   title: { 
-                     type: Type.STRING,
-                     description: `Localized habit title in ${lang}`
-                   },
-                   description: { 
-                     type: Type.STRING,
-                     description: `Localized habit description in ${lang}`
-                   },
-                   timeOfDay: { 
-                     type: Type.STRING,
-                     description: `Localized time of day in ${lang}`
-                   }
+                   title: { type: Type.STRING },
+                   description: { type: Type.STRING },
+                   timeOfDay: { type: Type.STRING }
                },
                required: ["title", "description", "timeOfDay"]
             }
