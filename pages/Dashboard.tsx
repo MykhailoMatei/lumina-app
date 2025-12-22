@@ -1,7 +1,6 @@
-
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { Check, Plus, Flame, Sun, X, Trash2, Sparkles, Target, Clock, Moon, TrendingUp, Bell, Loader2, ShieldCheck, ShieldAlert, FileDown, ChevronDown, ChevronUp, AlertCircle, Layers, Crown } from 'lucide-react';
+import { Check, Plus, Flame, Sun, X, Trash2, Sparkles, Target, Clock, Moon, TrendingUp, Bell, Loader2, ShieldCheck, ShieldAlert, FileDown, ChevronDown, ChevronUp, AlertCircle, Layers, Crown, Trophy } from 'lucide-react';
 import { generateDailyBriefing, translateDailyBriefing } from '../services/geminiService';
 import { Habit, Goal } from '../types';
 
@@ -41,6 +40,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
     const percent = Math.round((done / total) * 100);
     return { percent, isPerfect: percent === 100, done, total };
   }, [habits, today]);
+
+  const goalSummary = useMemo(() => {
+    const completed = goals.filter(g => g.completed).length;
+    const total = goals.length;
+    return { completed, total };
+  }, [goals]);
 
   const momentumMessage = useMemo(() => {
     const p = dailyStats.percent;
@@ -202,7 +207,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
   })();
 
   const isImageAvatar = avatar && (avatar.startsWith('data:image') || avatar.startsWith('http'));
-  const showFrictionWarning = habits.length >= 6 && !editingHabitId;
   const isPerfect = dailyStats.percent === 100;
 
   const routineOptions = [
@@ -233,8 +237,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
   );
 
   return (
-    <>
-      <div className="space-y-6 animate-in fade-in duration-700 relative">
+    <div className="animate-in fade-in duration-700 relative">
+      <div className="space-y-6">
         <div className="flex justify-between items-start pt-2">
           <div className="space-y-1">
             <p className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-widest">
@@ -248,7 +252,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
               <FileDown size={10} className="ml-0.5 opacity-50" />
             </button>
           </div>
-          <button onClick={() => setView('profile')} className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-900 text-2xl flex items-center justify-center border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
+          <button onClick={() => setView('profile')} className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-900 text-2xl flex items-center justify-center border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden active:scale-95 transition-transform">
               {isImageAvatar ? <img src={avatar} className="w-full h-full object-cover" alt="User" /> : avatar}
           </button>
         </div>
@@ -283,33 +287,42 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
           </div>
         )}
 
-        <div className={`rounded-[2rem] py-4 px-6 shadow-sm border transition-all duration-700 space-y-4 ${
-            isPerfect 
-            ? 'bg-amber-50/50 dark:bg-amber-900/5 border-amber-200 dark:border-amber-500/10 shadow-amber-500/5' 
-            : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800'
-        }`}>
-             <div className="flex justify-between items-center px-1">
-                 <h2 className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${isPerfect ? 'text-amber-600 dark:text-amber-400/80' : 'text-slate-400'}`}>
-                    {isPerfect ? <Crown size={12} className="text-amber-500 dark:text-amber-400/60" /> : <TrendingUp size={12} className={themeClasses.text}/>} 
-                    {t('momentum_title')}
-                 </h2>
-                 <span className={`text-[10px] font-black ${isPerfect ? 'text-amber-500 dark:text-amber-400/90' : themeClasses.text}`}>
-                    {dailyStats.percent}% {isPerfect && '✨'}
-                 </span>
-             </div>
-             <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden relative">
-                 <div 
-                    className={`h-full transition-all duration-1000 ${
-                        isPerfect 
-                        ? 'bg-amber-500 dark:bg-amber-500/80' 
-                        : themeClasses.primary
-                    }`}
-                    style={{ width: `${dailyStats.percent}%` }}
-                 />
-             </div>
-             <p className={`text-[10px] font-bold text-center ${isPerfect ? 'text-amber-600 dark:text-amber-400/70' : 'text-slate-400'}`}>
-                {isPerfect ? "You're unstoppable! " + momentumMessage : momentumMessage}
-             </p>
+        {/* METRICS ROW: MOMENTUM & GOAL TRACKING */}
+        <div className="grid grid-cols-1 gap-4">
+            <div className={`rounded-[2rem] py-5 px-6 shadow-sm border transition-all duration-700 space-y-4 ${
+                isPerfect 
+                ? 'bg-amber-50/50 dark:bg-amber-900/5 border-amber-200 dark:border-amber-500/10 shadow-amber-500/5' 
+                : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800'
+            }`}>
+                 <div className="flex justify-between items-center px-1">
+                     <h2 className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${isPerfect ? 'text-amber-600 dark:text-amber-400/80' : 'text-slate-400'}`}>
+                        {isPerfect ? <Crown size={12} className="text-amber-500 dark:text-amber-400/60" /> : <TrendingUp size={12} className={themeClasses.text}/>} 
+                        {t('momentum_title')}
+                     </h2>
+                     <span className={`text-[10px] font-black ${isPerfect ? 'text-amber-500 dark:text-amber-400/90' : themeClasses.text}`}>
+                        {dailyStats.percent}% {isPerfect && '✨'}
+                     </span>
+                 </div>
+                 <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden relative">
+                     <div 
+                        className={`h-full transition-all duration-1000 ${
+                            isPerfect 
+                            ? 'bg-amber-500 dark:bg-amber-500/80' 
+                            : themeClasses.primary
+                        }`}
+                        style={{ width: `${dailyStats.percent}%` }}
+                     />
+                 </div>
+                 <div className="flex justify-between items-center">
+                    <p className={`text-[10px] font-bold ${isPerfect ? 'text-amber-600 dark:text-amber-400/70' : 'text-slate-400'}`}>
+                        {momentumMessage}
+                    </p>
+                    <div onClick={() => setView('goals')} className="flex items-center gap-1.5 cursor-pointer hover:opacity-70 transition-opacity">
+                         <Trophy size={11} className={goalSummary.completed === goalSummary.total && goalSummary.total > 0 ? 'text-amber-500' : 'text-slate-300'} />
+                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{goalSummary.completed}/{goalSummary.total} {t('goals').toLowerCase()}</span>
+                    </div>
+                 </div>
+            </div>
         </div>
 
         <div className="space-y-4 pb-32">
@@ -327,7 +340,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
 
                 return (
                     <div key={timeKey} className={`overflow-hidden rounded-[2rem] transition-all duration-500 ${expanded ? 'bg-transparent' : 'bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm'}`}>
-                        <div onClick={toggle} className="flex items-center justify-between p-4 cursor-pointer">
+                        <div onClick={toggle} className="flex items-center justify-between p-4 cursor-pointer active:bg-slate-50 dark:active:bg-slate-800/20 transition-colors">
                             <div className="flex items-center gap-3.5 min-w-0">
                                 <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border transition-all ${
                                     isRoutineDone ? 'bg-emerald-100 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/10 text-emerald-500 dark:text-emerald-500/80' : 
@@ -388,10 +401,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                 );
             })}
         </div>
+      </div>
 
-        <button onClick={handleOpenCreate} className={`fixed bottom-24 right-6 w-16 h-16 rounded-full ${themeClasses.primary} text-white shadow-2xl flex items-center justify-center hover:scale-110 active:scale-95 transition-all z-40`}>
-            <Plus size={32} strokeWidth={3} />
-        </button>
+      {/* FLOATING ACTION BUTTON (FAB) */}
+      <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-full max-w-lg pointer-events-none z-30 px-6">
+          <div className="relative h-full w-full">
+              <button 
+                  onClick={handleOpenCreate} 
+                  className={`absolute right-0 w-14 h-14 rounded-full ${themeClasses.primary} text-white shadow-lg flex items-center justify-center hover:scale-110 active:scale-95 transition-all pointer-events-auto ring-4 ring-white/10 dark:ring-slate-900/40 animate-in fade-in zoom-in slide-in-from-bottom-4 duration-500 delay-300`}
+                  aria-label={t('new_habit')}
+              >
+                  <Plus size={28} strokeWidth={3.5} />
+              </button>
+          </div>
       </div>
 
       {showModal && (
@@ -418,18 +440,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                           </div>
                       </div>
 
-                      {showFrictionWarning && (
-                        <div className="bg-amber-50 dark:bg-amber-950/20 border border-amber-100 dark:border-amber-800/40 p-5 rounded-3xl flex gap-3 animate-in slide-in-from-top-4 duration-500 shadow-sm shadow-amber-100/50">
-                          <Sparkles className="text-amber-500 shrink-0 mt-0.5" size={20} />
-                          <div>
-                            <h4 className="text-[10px] font-black text-amber-600 dark:text-amber-400 uppercase tracking-widest mb-1">Peak Focus Achieved</h4>
-                            <p className="text-[12px] font-semibold text-amber-700 dark:text-amber-300 leading-snug">
-                              You've built an incredible rhythm with {habits.length} habits! To protect this elite discipline and ensure lasting growth, consider mastering your current routine before introducing new challenges.
-                            </p>
-                          </div>
-                        </div>
-                      )}
-
                       <div className="space-y-5">
                           <div className="space-y-2">
                               <label className="text-[9px] font-bold text-slate-400 dark:text-slate-50 uppercase tracking-widest ml-1">{t('link_goal')}</label>
@@ -450,7 +460,8 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                                 isSelected={!linkedGoalId} 
                                                 onClick={() => { setLinkedGoalId(''); setShowGoalSelector(false); }} 
                                               />
-                                              {goals.map(g => (
+                                              {/* Logic: Only show goals that are NOT completed for habit linking */}
+                                              {goals.filter(g => !g.completed).map(g => (
                                                   <SelectorItem 
                                                     key={g.id} 
                                                     label={g.title} 
@@ -508,7 +519,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                     type="time" 
                                     value={reminderTime} 
                                     onChange={e => setReminderTime(e.target.value)} 
-                                    className={`w-full bg-slate-50 dark:bg-slate-800 border rounded-xl px-4 py-3 text-xs font-bold text-slate-800 dark:text-white outline-none shadow-sm transition-all ${!isTimeValid ? 'border-rose-500 ring-2 ring-rose-500/10' : 'border-slate-100 dark:border-slate-800 focus:ring-2 focus:ring-indigo-500/10'}`} 
+                                    className={`w-full bg-slate-50 dark:bg-slate-800 border rounded-xl px-4 py-3 text-sm font-bold text-slate-800 dark:text-white outline-none shadow-sm transition-all ${!isTimeValid ? 'border-rose-500 ring-2 ring-rose-500/10' : 'border-slate-100 dark:border-slate-800 focus:ring-2 focus:ring-indigo-500/10'}`} 
                                   />
                                   <p className={`text-[8px] font-black uppercase mt-1 px-1 flex items-center gap-1 ${!isTimeValid ? 'text-rose-500 animate-pulse' : 'text-slate-400'}`}>
                                     <AlertCircle size={10}/> {TIME_CONSTRAINTS[habitTime].label}
@@ -525,6 +536,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
               </div>
           </div>
       )}
-    </>
+    </div>
   );
 };

@@ -1,4 +1,3 @@
-
 import React, { useState, useMemo, useEffect } from 'react';
 import { useApp } from '../context/AppContext';
 import { Goal, GoalCategory, Milestone } from '../types';
@@ -99,7 +98,9 @@ export const Goals: React.FC = () => {
         updateGoal(goalId, { 
           milestones: updatedMilestones, 
           progress: newProgress,
-          completed: false // If user unchecks a milestone, ensure it stays active
+          // Logic: If user unchecks a milestone in a completed goal, it reactivates.
+          // If the progress is 100%, it remains completed.
+          completed: isNowFinished && goal.completed 
         });
     }
   };
@@ -258,8 +259,9 @@ export const Goals: React.FC = () => {
           
           return (
             <div key={goal.id} className={`overflow-hidden rounded-[2rem] transition-all duration-700 ${
-                isExpanded ? 'bg-transparent' : 
                 isCelebrating ? 'bg-emerald-50 dark:bg-emerald-950/20 border-emerald-200 dark:border-emerald-500/10 shadow-lg shadow-emerald-100' :
+                isCompleted ? 'opacity-70 grayscale-[0.3] bg-slate-50/50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-800' :
+                isExpanded ? 'bg-transparent' : 
                 'bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm'
             }`}>
               
@@ -286,6 +288,7 @@ export const Goals: React.FC = () => {
                             </h3>
                             {isOverdue && !isCelebrating && !isCompleted && <span className="text-[7px] font-black uppercase px-1.5 py-0.5 rounded-full border border-amber-200 bg-amber-50 text-amber-600 animate-pulse">{t('overdue_label')}</span>}
                             {isCelebrating && <PartyPopper size={12} className="text-emerald-500 animate-bounce" />}
+                            {isCompleted && <span className="text-[7px] font-black uppercase px-1.5 py-0.5 rounded-full border border-slate-200 bg-slate-50 text-slate-400 dark:bg-slate-800 dark:border-slate-700">{t('done_btn')}</span>}
                         </div>
                         <div className="flex items-center gap-2 mt-0.5">
                             <span className="text-[8px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-widest">{catLabel}</span>
@@ -323,8 +326,8 @@ export const Goals: React.FC = () => {
                             <div className="flex items-center gap-3">
                                 <Sparkles size={20} className="shrink-0" />
                                 <div className="flex-1">
-                                    <p className="text-[11px] font-black uppercase tracking-widest mb-0.5">Incredible Win!</p>
-                                    <p className="text-[13px] font-bold leading-tight opacity-90">Congratulations! This goal is moving to your Hall of Fame now...</p>
+                                    <p className="text-[11px] font-black uppercase tracking-widest mb-0.5">{t('goal_win_title')}</p>
+                                    <p className="text-[13px] font-bold leading-tight opacity-90">{t('goal_win_desc')}</p>
                                 </div>
                                 <div className="ml-auto w-8 h-8 rounded-full bg-white/20 flex items-center justify-center animate-pulse">
                                     <ArrowRight size={16} strokeWidth={3} />
@@ -338,7 +341,7 @@ export const Goals: React.FC = () => {
                         <div className={`p-4 rounded-2xl border mb-1 transition-colors duration-500 ${isCelebrating ? 'bg-white/40 border-emerald-100 dark:bg-slate-800/20 dark:border-emerald-500/10' : 'bg-slate-50/50 dark:bg-slate-800/40 border-slate-100 dark:border-slate-800'}`}>
                              <div className="flex items-center gap-2 mb-2">
                                 <Info size={10} className={isCelebrating ? 'text-emerald-400' : 'text-slate-400'} />
-                                <span className={`text-[8px] font-black uppercase tracking-widest ${isCelebrating ? 'text-emerald-400' : 'text-slate-400'}`}>Purpose & Vision</span>
+                                <span className={`text-[8px] font-black uppercase tracking-widest ${isCelebrating ? 'text-emerald-400' : 'text-slate-400'}`}>{t('goal_vision_label')}</span>
                              </div>
                              <p className={`text-xs font-medium leading-relaxed transition-colors duration-500 ${isCelebrating ? 'text-emerald-700 dark:text-emerald-400' : 'text-slate-600 dark:text-slate-400'}`}>{goal.description}</p>
                         </div>
@@ -388,9 +391,12 @@ export const Goals: React.FC = () => {
                             <button onClick={() => handleOpenEdit(goal)} className="flex-1 py-3.5 bg-white dark:bg-slate-800 text-slate-400 rounded-2xl text-[9px] font-black uppercase tracking-[0.2em] border border-slate-100 dark:border-slate-800 shadow-sm active:scale-95 transition-all flex items-center justify-center gap-2">
                                 <Edit3 size={14} /> {t('edit')}
                             </button>
-                            <button onClick={() => setShowDeleteConfirm(goal.id)} className="w-14 py-3.5 bg-rose-50 dark:bg-rose-900/10 text-rose-500 rounded-2xl border border-rose-100 dark:border-rose-900/20 shadow-sm active:scale-90 transition-transform flex items-center justify-center">
-                                <Trash2 size={16}/>
-                            </button>
+                            {/* Logic: Only show delete for active goals. Hall of Fame goals are permanent. */}
+                            {!isCompleted && (
+                                <button onClick={() => setShowDeleteConfirm(goal.id)} className="w-14 py-3.5 bg-rose-50 dark:bg-rose-900/10 text-rose-500 rounded-2xl border border-rose-100 dark:border-rose-900/20 shadow-sm active:scale-90 transition-transform flex items-center justify-center">
+                                    <Trash2 size={16}/>
+                                </button>
+                            )}
                         </div>
                     )}
                 </div>
@@ -402,7 +408,7 @@ export const Goals: React.FC = () => {
         {displayedGoals.length === 0 && (
             <div className="flex flex-col items-center justify-center py-20 opacity-30">
                 {activeTab === 'completed' ? <Trophy size={64} strokeWidth={1}/> : activeTab === 'overdue' ? <Check size={64} strokeWidth={1}/> : <Target size={64} strokeWidth={1}/>}
-                <p className="mt-4 text-[10px] font-black uppercase tracking-widest">
+                <p className="mt-4 text-[10px] font-black uppercase tracking-widest text-center px-8">
                     {activeTab === 'completed' ? t('no_archive') : activeTab === 'overdue' ? t('no_overdue') : t('no_active_goals')}
                 </p>
             </div>
