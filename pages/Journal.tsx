@@ -1,535 +1,387 @@
 
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useRef, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { generateDailyPrompt, generateEntryInsight } from '../services/geminiService';
 import { 
-    Book, Wand2, Trash2, X, 
-    PenLine, ChevronDown, Check, Layout, Mic, Activity, Sparkles,
-    Search, Calendar, Download, Settings, BarChart2, ChevronUp, Clock, Link,
-    Type, Bold, Italic, List, Send, Image as ImageIcon, Plus, Target, Pencil
+    Book, PenLine, X, Send, Sparkles, Search, Trash2, 
+    ImageIcon, Loader2, Target, History, Calendar, Camera, Zap
 } from 'lucide-react';
-import { JournalEntry } from '../types';
+import { generateEntryInsight } from '../services/geminiService';
 
 export const Journal: React.FC = () => {
-  const { 
-      goals, addJournalEntry, updateJournalEntry, deleteJournalEntry, journalEntries, t,
-      themeClasses, savedTemplates, language, reflectionTime = '05:00',
-      dailyBriefing
-  } = useApp();
-  
-  const MOODS = useMemo(() => [
-    { key: 'great', label: t('mood_great'), emoji: '🤩', color: 'text-indigo-600', bg: 'bg-indigo-50' },
-    { key: 'good', label: t('mood_good'), emoji: '🙂', color: 'text-emerald-500', bg: 'bg-emerald-50' },
-    { key: 'neutral', label: t('mood_neutral'), emoji: '😐', color: 'text-slate-400', bg: 'bg-slate-50' },
-    { key: 'bad', label: t('mood_bad'), emoji: '☹️', color: 'text-orange-500', bg: 'bg-orange-50' },
-    { key: 'awful', label: t('mood_awful'), emoji: '😫', color: 'text-rose-600', bg: 'bg-rose-50' }
-  ], [t]);
+    const { 
+        journalEntries, addJournalEntry, deleteJournalEntry, goals, habits,
+        t, themeClasses, language, dailyBriefing 
+    } = useApp();
+    
+    const [showEditor, setShowEditor] = useState(false);
+    const [content, setContent] = useState('');
+    const [mood, setMood] = useState<'Great' | 'Good' | 'Neutral' | 'Bad' | 'Awful'>('Great');
+    const [submitting, setSubmitting] = useState(false);
+    const [search, setSearch] = useState('');
+    const [linkedGoalId, setLinkedGoalId] = useState<string>('');
+    const [linkedHabitId, setLinkedHabitId] = useState<string>('');
+    const [attachedImage, setAttachedImage] = useState<string | null>(null);
+    const [linkFilter, setLinkFilter] = useState('');
+    
+    const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const STANDARD_ACTIVITY_KEYS = ['work', 'exercise', 'reading', 'family', 'friends', 'nature', 'creativity', 'relax', 'chores', 'learn'];
+    const MOODS = [
+        { key: 'Great', emoji: '🤩', color: 'text-indigo-500', bg: 'bg-indigo-500/10' },
+        { key: 'Good', emoji: '🙂', color: 'text-emerald-500', bg: 'bg-emerald-500/10' },
+        { key: 'Neutral', emoji: '😐', color: 'text-slate-400', bg: 'bg-slate-400/10' },
+        { key: 'Bad', emoji: '☹️', color: 'text-orange-500', bg: 'bg-orange-500/10' },
+        { key: 'Awful', emoji: '😫', color: 'text-rose-500', bg: 'bg-rose-500/10' }
+    ];
 
-  // Persistence keys
-  const COLLAPSE_KEY = 'lumina_journal_collapsed';
-  const COLLAPSE_TIME_KEY = 'lumina_journal_collapsed_at';
+    const currentMoodConfig = useMemo(() => MOODS.find(m => m.key === mood), [mood]);
 
-  const [showEditor, setShowEditor] = useState(false);
-  const [editingEntryId, setEditingEntryId] = useState<string | null>(null);
-  const [isReflectionCollapsed, setIsReflectionCollapsed] = useState(() => {
-    const saved = localStorage.getItem(COLLAPSE_KEY);
-    return saved === 'true';
-  });
-  const [searchQuery, setSearchQuery] = useState('');
-  
-  const [content, setContent] = useState('');
-  const [prompt, setPrompt] = useState(t('default_prompt'));
-  const [loadingPrompt, setLoadingPrompt] = useState(false);
-  const [submitting, setSubmitting] = useState(false);
-  
-  const [moodIndex, setMoodIndex] = useState(1); 
-  const [selectedActivities, setSelectedActivities] = useState<string[]>([]);
-  
-  const [customActivities, setCustomActivities] = useState<{key: string, label: string}[]>(() => {
-    const saved = localStorage.getItem('lumina_custom_tags_v3');
-    return saved ? JSON.parse(saved) : [];
-  });
+    // Sorting Logic for Links
+    const sortedGoals = useMemo(() => {
+        return goals.filter(g => !g.completed && g.title.toLowerCase().includes(linkFilter.toLowerCase()));
+    }, [goals, linkFilter]);
 
-  const [isAddingTag, setIsAddingTag] = useState(false);
-  const [newTagInput, setNewTagInput] = useState('');
-  
-  const [selectedGoalId, setSelectedGoalId] = useState('');
-  const [showTemplateMenu, setShowTemplateMenu] = useState(false);
-  const [showGoalSelector, setShowGoalSelector] = useState(false);
+    const sortedHabits = useMemo(() => {
+        const today = new Date().toISOString().split('T')[0];
+        return habits
+            .filter(h => h.title.toLowerCase().includes(linkFilter.toLowerCase()))
+            .sort((a, b) => {
+                const aDone = a.completedDates.includes(today);
+                const bDone = b.completedDates.includes(today);
+                if (aDone && !bDone) return -1; // Show just-completed first
+                if (!aDone && bDone) return 1;
+                return 0;
+            });
+    }, [habits, linkFilter]);
 
-  // Sync custom tags
-  useEffect(() => {
-    localStorage.setItem('lumina_custom_tags_v3', JSON.stringify(customActivities));
-  }, [customActivities]);
+    const flashback = useMemo(() => {
+        if (journalEntries.length < 2) return null;
+        const threeDaysAgo = new Date();
+        threeDaysAgo.setDate(threeDaysAgo.getDate() - 3);
+        const oldEntries = journalEntries.filter(e => new Date(e.date) < threeDaysAgo);
+        if (oldEntries.length === 0) return null;
+        return oldEntries[Math.floor(Math.random() * oldEntries.length)];
+    }, [journalEntries]);
 
-  // Sync prompt with daily briefing if available, stripping any accidental JSON artifacts
-  useEffect(() => {
-    if (dailyBriefing?.journalPrompt) {
-      let cleanPrompt = dailyBriefing.journalPrompt;
-      // Safety check: if the model returned raw JSON despite instructions
-      if (cleanPrompt.includes('{') && cleanPrompt.includes(':')) {
-          try {
-              const parsed = JSON.parse(cleanPrompt);
-              cleanPrompt = parsed.journal_prompt || parsed.prompt || cleanPrompt;
-          } catch (e) {
-              // Not valid JSON, just use as is or find first question mark
-          }
-      }
-      setPrompt(cleanPrompt);
-    }
-  }, [dailyBriefing]);
-
-  // Reset collapse logic for 5 AM
-  useEffect(() => {
-    const checkReset = () => {
-        const collapsedAtStr = localStorage.getItem(COLLAPSE_TIME_KEY);
-        if (!collapsedAtStr || !isReflectionCollapsed) return;
-
-        const now = new Date();
-        const collapsedAt = new Date(collapsedAtStr);
+    const handleSubmit = async () => {
+        if (!content.trim()) return;
+        setSubmitting(true);
         
-        // Calculate the most recent 5 AM
-        const mostRecent5AM = new Date();
-        mostRecent5AM.setHours(5, 0, 0, 0);
-        if (now < mostRecent5AM) {
-            mostRecent5AM.setDate(mostRecent5AM.getDate() - 1);
-        }
+        const linkedGoal = goals.find(g => g.id === linkedGoalId);
+        const linkedHabit = habits.find(h => h.id === linkedHabitId);
+        
+        const insight = await generateEntryInsight(
+            content, 
+            mood, 
+            linkedGoal?.title || null, 
+            linkedHabit?.title || null,
+            attachedImage, 
+            language
+        );
 
-        // If it was collapsed before the last 5 AM cycle, reset it
-        if (collapsedAt < mostRecent5AM) {
-            setIsReflectionCollapsed(false);
-            localStorage.setItem(COLLAPSE_KEY, 'false');
+        addJournalEntry({
+            id: Date.now().toString(),
+            date: new Date().toISOString(),
+            content, 
+            mood, 
+            activities: [],
+            prompt: dailyBriefing?.journalPrompt || "What's on your mind?",
+            aiInsight: insight,
+            linkedGoalId: linkedGoalId || undefined,
+            linkedHabitId: linkedHabitId || undefined,
+            imageData: attachedImage || undefined
+        });
+
+        setSubmitting(false);
+        resetEditor();
+    };
+
+    const resetEditor = () => {
+        setContent('');
+        setMood('Great');
+        setLinkedGoalId('');
+        setLinkedHabitId('');
+        setAttachedImage(null);
+        setLinkFilter('');
+        setShowEditor(false);
+    };
+
+    const handleImageUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const file = e.target.files?.[0];
+        if (file) {
+            const reader = new FileReader();
+            reader.onload = () => setAttachedImage(reader.result as string);
+            reader.readAsDataURL(file);
         }
     };
 
-    checkReset();
-  }, [language, isReflectionCollapsed]);
+    const filtered = journalEntries.filter((e: any) => 
+        e.content.toLowerCase().includes(search.toLowerCase()) || 
+        (goals.find(g => g.id === e.linkedGoalId)?.title || '').toLowerCase().includes(search.toLowerCase())
+    );
 
-  const toggleReflectionCollapse = () => {
-    const newState = !isReflectionCollapsed;
-    setIsReflectionCollapsed(newState);
-    localStorage.setItem(COLLAPSE_KEY, String(newState));
-    localStorage.setItem(COLLAPSE_TIME_KEY, new Date().toISOString());
-  };
-
-  const refreshPrompt = async () => {
-    setLoadingPrompt(true);
-    try {
-        const newPrompt = await generateDailyPrompt(goals, language);
-        setPrompt(newPrompt);
-    } catch (e) {
-        setPrompt(t('default_prompt'));
-    } finally {
-        setLoadingPrompt(false);
-    }
-  };
-
-  const getActLabel = (actKey: string) => {
-    if (STANDARD_ACTIVITY_KEYS.includes(actKey)) {
-        return t(`act_${actKey}`);
-    }
-    const custom = customActivities.find(a => a.key === actKey);
-    return custom?.label || actKey;
-  };
-
-  const toggleActivity = (actKey: string) => {
-    setSelectedActivities(prev => prev.includes(actKey) ? prev.filter(a => a !== actKey) : [...prev, actKey]);
-  };
-
-  const deleteCustomTag = (e: React.MouseEvent, actKey: string) => {
-    e.stopPropagation();
-    if (confirm(t('remove_tag_confirm'))) {
-        setCustomActivities(prev => prev.filter(a => a.key !== actKey));
-        setSelectedActivities(prev => prev.filter(a => a !== actKey));
-    }
-  };
-
-  const addCustomTag = () => {
-    const tagLabel = newTagInput.trim();
-    if (tagLabel) {
-      const newKey = `custom_${Date.now()}`;
-      const newTag = { key: newKey, label: tagLabel };
-      setCustomActivities(prev => [...prev, newTag]);
-      setSelectedActivities(prev => [...prev, newKey]);
-      setNewTagInput('');
-      setIsAddingTag(false);
-    }
-  };
-
-  const applyTemplate = (tplContent: string) => {
-    setContent(prev => prev + (prev ? '\n\n' : '') + tplContent);
-    setShowTemplateMenu(false);
-  };
-
-  const handleOpenCreate = () => {
-      setEditingEntryId(null);
-      setContent('');
-      setSelectedActivities([]);
-      setSelectedGoalId('');
-      setMoodIndex(1);
-      setShowEditor(true);
-  };
-
-  const handleOpenEdit = (journalEntry: JournalEntry) => {
-      setEditingEntryId(journalEntry.id);
-      setContent(journalEntry.content);
-      setPrompt(journalEntry.prompt);
-      setSelectedActivities(journalEntry.activities || []);
-      setSelectedGoalId(journalEntry.linkedGoalId || '');
-      const moodIdx = MOODS.findIndex(m => m.key === journalEntry.mood);
-      setMoodIndex(moodIdx !== -1 ? moodIdx : 1);
-      setShowEditor(true);
-  };
-
-  const handleSubmit = async () => {
-    if (!content.trim()) return;
-    setSubmitting(true);
-
-    try {
-        const insight = await generateEntryInsight(content, language);
-        
-        if (editingEntryId) {
-            updateJournalEntry(editingEntryId, {
-                content,
-                mood: MOODS[moodIndex].key as any,
-                activities: selectedActivities,
-                aiInsight: insight,
-                linkedGoalId: selectedGoalId || undefined
-            });
-        } else {
-            addJournalEntry({
-                id: Date.now().toString(),
-                date: new Date().toISOString(),
-                content,
-                prompt,
-                mood: MOODS[moodIndex].key as any,
-                activities: selectedActivities,
-                attachments: [],
-                aiInsight: insight,
-                linkedGoalId: selectedGoalId || undefined
-            });
-        }
-    } finally {
-        setSubmitting(false);
-        setContent('');
-        setSelectedActivities([]);
-        setSelectedGoalId('');
-        setEditingEntryId(null);
-        setShowEditor(false); 
-    }
-  };
-
-  const filteredEntries = journalEntries.filter(e => 
-    e.content.toLowerCase().includes(searchQuery.toLowerCase()) || 
-    e.prompt.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const getThemeHex = () => {
-      if (themeClasses.text.includes('indigo')) return '#4f46e5';
-      if (themeClasses.text.includes('emerald')) return '#059669';
-      if (themeClasses.text.includes('rose')) return '#e11d48';
-      if (themeClasses.text.includes('amber')) return '#d97706';
-      return '#2563eb'; 
-  };
-
-  const dateLocale = language === 'Ukrainian' ? 'uk-UA' : (language === 'Spanish' ? 'es-ES' : (language === 'French' ? 'fr-FR' : (language === 'German' ? 'de-DE' : 'en-US')));
-
-  return (
-    <>
-      <div className="pb-32 space-y-6 animate-in fade-in duration-700">
-        {/* DAILY REFLECTION CARD */}
-        <div className={`-mx-6 -mt-6 rounded-b-[2.5rem] shadow-sm ${themeClasses.shadow} relative overflow-hidden transition-all duration-500 bg-gradient-to-br ${themeClasses.gradient} ${isReflectionCollapsed ? 'h-[135px]' : 'pb-10 pt-10'}`}>
-          <div className="absolute top-0 right-0 w-64 h-64 bg-white/5 rounded-full -mr-20 -mt-20 blur-3xl pointer-events-none" />
-          
-          <div className={`px-6 flex flex-col h-full ${isReflectionCollapsed ? 'justify-center' : 'justify-between'}`}>
-              <div className={`flex justify-between items-center ${isReflectionCollapsed ? 'mb-4' : 'mb-6'}`}>
-                  <h1 className="text-2xl font-bold text-white tracking-tight">{t('daily_reflection')}</h1>
-                  <div className="flex gap-1">
-                      <button onClick={refreshPrompt} className="p-2 text-white/60 hover:text-white transition-colors"><Settings size={18} /></button>
-                      <button className="p-2 text-white/60 hover:text-white transition-colors"><BarChart2 size={18} /></button>
-                      <button onClick={toggleReflectionCollapse} className="p-2 text-white/60 hover:text-white transition-colors">
-                          {isReflectionCollapsed ? <ChevronDown size={20} /> : <ChevronUp size={20} />}
-                      </button>
-                  </div>
-              </div>
-
-              {!isReflectionCollapsed ? (
-                  <div className="animate-in fade-in slide-in-from-top-2 duration-300">
-                      <p className="text-white/90 text-lg font-medium leading-snug mb-8 max-w-[90%]">
-                          {loadingPrompt ? t('curating_question') : prompt}
-                      </p>
-                      <div className="flex justify-between items-end">
-                          <button onClick={handleOpenCreate} className="bg-white px-6 py-3 rounded-2xl font-bold text-sm shadow-xl flex items-center gap-2 hover:scale-105 active:scale-95 transition-all" style={{color: getThemeHex()}}>
-                              <PenLine size={18} /> {t('write_entry')}
-                          </button>
-                          <div className="flex items-center gap-1.5 text-[10px] text-white/40 font-bold uppercase tracking-widest bg-black/10 px-3 py-1.5 rounded-full">
-                              <Clock size={12} /> {t('daily_label')} {reflectionTime}
-                          </div>
-                      </div>
-                  </div>
-              ) : (
-                  <div className="flex items-center justify-between animate-in fade-in slide-in-from-bottom-2 duration-300">
-                      <p className="text-white/70 text-[13px] font-medium italic truncate flex-1 opacity-90 leading-tight pr-4">
-                          {loadingPrompt ? t('curating_question') : prompt}
-                      </p>
-                      <button onClick={handleOpenCreate} className="bg-white/15 hover:bg-white/25 p-2.5 rounded-full text-white transition-all shadow-sm shrink-0 border border-white/10 active:scale-90">
-                          <PenLine size={18}/>
-                      </button>
-                  </div>
-              )}
-          </div>
-        </div>
-
-        {/* SEARCH BAR */}
-        <div className="flex gap-3 px-1 mt-4">
-          <button className="w-12 h-12 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center justify-center text-slate-400 shadow-sm transition-transform active:scale-95"><Calendar size={20} /></button>
-          <div className="flex-1 relative">
-              <Search className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
-              <input type="text" placeholder={t('search_memories')} value={searchQuery} onChange={(e) => setSearchQuery(e.target.value)} className="w-full h-12 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-2xl pl-12 pr-4 text-sm font-medium outline-none shadow-sm transition-all focus:ring-2 focus:ring-slate-100 dark:focus:ring-slate-800" />
-          </div>
-          <button className="w-12 h-12 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 flex items-center justify-center text-slate-400 shadow-sm transition-transform active:scale-95"><Download size={20} /></button>
-        </div>
-
-        {/* JOURNAL HISTORY */}
-        <div className="space-y-5 px-1">
-          {filteredEntries.map((entry) => {
-              const mood = MOODS.find(m => m.key === entry.mood) || MOODS[1];
-              const entryLinkedGoal = goals.find(g => g.id === entry.linkedGoalId);
-              return (
-                  <div key={entry.id} className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] shadow-sm border border-slate-100 dark:border-slate-800 group relative transition-all hover:shadow-md">
-                      <div className="flex justify-between items-start mb-4">
-                          <div className="flex items-center gap-3">
-                              <div className={`px-3 py-1 rounded-lg ${mood?.bg} dark:bg-slate-800 ${mood?.color} text-[10px] font-bold uppercase tracking-widest`}>{mood.label}</div>
-                              <h4 className="text-[10px] font-bold uppercase tracking-widest text-slate-400 dark:text-slate-50">
-                                  {new Date(entry.date).toLocaleDateString(dateLocale, { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
-                              </h4>
-                          </div>
-                          <div className="flex items-center gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                              <button onClick={() => handleOpenEdit(entry)} className="p-1.5 text-slate-300 hover:text-slate-500 transition-colors"><Pencil size={16} /></button>
-                              <button onClick={() => { if(confirm(t('delete_entry_confirm'))) deleteJournalEntry(entry.id); }} className="p-1.5 text-slate-300 hover:text-red-500 transition-colors"><Trash2 size={16} /></button>
-                          </div>
-                      </div>
-                      {entryLinkedGoal && (
-                          <div className={`flex items-center gap-1.5 px-3 py-1.5 ${themeClasses.secondary} ${themeClasses.text} text-[9px] font-bold rounded-xl border ${themeClasses.border} w-fit mb-4`}>
-                              <Link size={10} /> {entryLinkedGoal.title}
-                          </div>
-                      )}
-                      <div className="space-y-4">
-                          <p className="text-[12px] text-slate-400 dark:text-slate-500 italic leading-snug border-l-2 border-slate-100 dark:border-slate-800 pl-3">{entry.prompt}</p>
-                          <p className="text-slate-800 dark:text-slate-100 text-[15px] font-medium leading-relaxed">{entry.content}</p>
-                          
-                          <div className="flex flex-wrap gap-2 mt-4">
-                              {entry.activities?.map(actKey => (
-                                  <span key={actKey} className="px-3 py-1 bg-slate-50 dark:bg-slate-800 text-slate-400 text-[9px] font-bold uppercase rounded-full border border-slate-100 dark:border-slate-700">
-                                      {getActLabel(actKey)}
-                                  </span>
-                              ))}
-                          </div>
-
-                          {entry.aiInsight && (
-                              <div className={`${themeClasses.secondary} p-4 rounded-2xl flex gap-3 items-center border ${themeClasses.border} mt-6`}>
-                                  <Sparkles className={`${themeClasses.text} shrink-0`} size={16} />
-                                  <p className={`text-xs ${themeClasses.text} font-bold leading-relaxed`}>{entry.aiInsight}</p>
-                              </div>
-                          )}
-                      </div>
-                  </div>
-              );
-          })}
-          {filteredEntries.length === 0 && (
-              <div className="text-center py-20 opacity-20">
-                  <Book className="mx-auto mb-4" size={48} />
-                  <p className="text-[10px] font-bold uppercase tracking-[0.2em]">{t('no_templates_msg')}</p>
-              </div>
-          )}
-        </div>
-      </div>
-
-      {/* NEW/EDIT REFLECTION MODAL */}
-      {showEditor && (
-        <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-xl flex items-center justify-center p-4 sm:p-6 animate-in fade-in duration-300">
-           <div className="bg-white dark:bg-slate-900 w-full max-w-[92%] sm:max-w-lg rounded-[3rem] p-10 sm:p-12 shadow-xl flex flex-col max-h-[90vh] overflow-hidden relative border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-300">
-               
-               <div className="flex justify-between items-center mb-10">
-                   <div className="flex items-center gap-4">
-                        <div className={`w-12 h-12 rounded-xl ${themeClasses.secondary} flex items-center justify-center ${themeClasses.text} shadow-sm border ${themeClasses.border}`}>
-                             {editingEntryId ? <Pencil size={22} /> : <PenLine size={22} />}
+    return (
+        <div className="pb-32 space-y-6 animate-in fade-in duration-500">
+            {/* REFINED HERO PROMPT SECTION */}
+            <div className={`p-6 rounded-[2.5rem] bg-gradient-to-br ${themeClasses.gradient} text-white shadow-xl relative overflow-hidden group transition-all duration-500`}>
+                <div className="absolute top-0 right-0 w-48 h-48 bg-white/10 rounded-full -mr-24 -mt-24 blur-3xl group-hover:scale-125 transition-transform duration-1000" />
+                
+                <div className="relative z-10 space-y-5">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <div className="w-6 h-6 rounded-lg bg-white/20 flex items-center justify-center backdrop-blur-md">
+                                <Sparkles size={12} />
+                            </div>
+                            <span className="text-[9px] font-bold uppercase tracking-[0.2em] opacity-80">Daily Focus</span>
                         </div>
-                        <div>
-                            <h2 className="text-xl font-bold text-slate-800 dark:text-slate-50 tracking-tight leading-tight">{editingEntryId ? t('edit_entry') : t('write_entry')}</h2>
-                            <p className="text-[11px] text-slate-400 font-bold uppercase tracking-widest mt-1.5">{t('reflect_grow')}</p>
-                        </div>
-                   </div>
-                   <button onClick={() => { setShowEditor(false); setEditingEntryId(null); }} className="bg-slate-50 dark:bg-slate-800 p-2.5 rounded-full text-slate-400 hover:text-slate-600 transition-all shadow-sm">
-                       <X size={20} />
-                   </button>
-               </div>
-
-               <div className="flex-1 overflow-y-auto space-y-8 no-scrollbar pr-1">
-                    <div className={`relative pl-6 border-l-2 ${themeClasses.border} py-1`}>
-                        <p className="text-[15px] text-slate-400 dark:text-slate-500 italic leading-snug font-medium">
-                           {prompt}
-                        </p>
                     </div>
+                    
+                    <h1 className="text-lg font-semibold tracking-tight leading-relaxed pr-4 opacity-95">
+                        {dailyBriefing?.journalPrompt || 'How did today shape who you are becoming?'}
+                    </h1>
+                    
+                    <button 
+                        onClick={() => setShowEditor(true)} 
+                        className="w-full bg-white/95 text-slate-900 px-5 py-3 rounded-2xl font-bold text-[10px] uppercase tracking-widest hover:bg-white active:scale-[0.98] shadow-lg transition-all flex items-center justify-center gap-2 group"
+                    >
+                        <PenLine size={14} className="group-hover:rotate-12 transition-transform" />
+                        Start Writing
+                    </button>
+                </div>
+            </div>
 
-                    <div className="flex flex-wrap items-center gap-4 pb-2">
-                        <div className="flex items-center gap-5 text-slate-300">
-                            <Bold size={18} className="cursor-pointer hover:text-slate-500 transition-colors" />
-                            <Italic size={18} className="cursor-pointer hover:text-slate-500 transition-colors" />
-                            <List size={18} className="cursor-pointer hover:text-slate-500 transition-colors" />
-                        </div>
-                        
-                        <div className="h-4 w-px bg-slate-100 dark:bg-slate-800" />
+            {/* FLASHBACK BANNER */}
+            {flashback && !showEditor && (
+                <div className="bg-amber-50 dark:bg-amber-900/10 border border-amber-100 dark:border-amber-900/30 p-4 rounded-3xl flex items-center gap-4 animate-in slide-in-from-top-4">
+                    <div className="w-10 h-10 rounded-2xl bg-amber-100 dark:bg-amber-900/40 text-amber-600 flex items-center justify-center shrink-0">
+                        <History size={18} />
+                    </div>
+                    <div className="min-w-0 flex-1">
+                        <p className="text-[8px] font-black uppercase tracking-widest text-amber-500 mb-0.5">Flashback Perspective</p>
+                        <p className="text-xs font-bold text-slate-700 dark:text-amber-200 line-clamp-1 italic">"{flashback.content}"</p>
+                    </div>
+                    <button 
+                        onClick={() => setSearch(flashback.content.substring(0, 10))}
+                        className="text-[9px] font-black uppercase tracking-tighter text-amber-600 hover:underline"
+                    >
+                        View
+                    </button>
+                </div>
+            )}
 
-                        {/* TEMPLATES DROPDOWN */}
-                        <div className="relative">
-                            <button 
-                                onClick={() => { setShowTemplateMenu(!showTemplateMenu); setShowGoalSelector(false); }}
-                                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl ${themeClasses.text} ${themeClasses.secondary} text-[12px] font-bold transition-all hover:opacity-80 shadow-sm border ${themeClasses.border}`}
-                            >
-                                <Book size={16} /> {t('templates')}
-                            </button>
-                            {showTemplateMenu && (
-                                <div className="absolute top-full left-0 mt-3 w-56 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl shadow-xl border border-slate-100 dark:border-slate-800 z-[150] p-2 animate-in fade-in zoom-in-95">
-                                    <div className="max-h-60 overflow-y-auto no-scrollbar">
-                                        {savedTemplates.map(t => (
-                                            <button key={t.id} onClick={() => applyTemplate(t.content)} className="w-full text-left p-4 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-2xl text-[11px] font-bold text-slate-700 dark:text-slate-200">{t.title}</button>
-                                        ))}
-                                        {savedTemplates.length === 0 && <p className="p-4 text-[11px] text-slate-400 italic">{t('no_templates_msg')}</p>}
+            {/* SEARCH & FILTERS */}
+            <div className="relative">
+                <Search className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300" size={18} />
+                <input 
+                    placeholder="Search memories or linked goals..." 
+                    value={search} 
+                    onChange={e => setSearch(e.target.value)} 
+                    className="w-full h-14 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 rounded-[1.5rem] pl-14 pr-4 text-sm font-bold outline-none shadow-sm focus:ring-4 focus:ring-indigo-500/5 transition-all dark:text-white" 
+                />
+            </div>
+
+            {/* ENTRY FEED */}
+            <div className="space-y-4">
+                {filtered.map((entry) => {
+                    const linkedGoal = goals.find(g => g.id === entry.linkedGoalId);
+                    const linkedHabit = habits.find(h => h.id === entry.linkedHabitId);
+                    return (
+                        <div key={entry.id} className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] border border-slate-50 dark:border-slate-800 shadow-sm hover:shadow-md transition-all group animate-in slide-in-from-bottom-4">
+                            <div className="flex justify-between items-center mb-4">
+                                <div className="flex items-center gap-3">
+                                    <div className={`w-10 h-10 rounded-2xl ${MOODS.find(m => m.key === entry.mood)?.bg} flex items-center justify-center text-xl`}>
+                                        {MOODS.find(m => m.key === entry.mood)?.emoji}
                                     </div>
+                                    <div className="flex flex-col">
+                                        <span className="text-[10px] font-black uppercase text-slate-400 tracking-widest">
+                                            {new Date(entry.date).toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })}
+                                        </span>
+                                        <div className="flex gap-2 mt-0.5">
+                                            {linkedGoal && (
+                                                <div className="flex items-center gap-1">
+                                                    <Target size={10} className={themeClasses.text} />
+                                                    <span className={`text-[9px] font-black uppercase tracking-tighter ${themeClasses.text}`}>{linkedGoal.title}</span>
+                                                </div>
+                                            )}
+                                            {linkedHabit && (
+                                                <div className="flex items-center gap-1 opacity-60">
+                                                    <Zap size={10} className="text-amber-500" />
+                                                    <span className={`text-[9px] font-black uppercase tracking-tighter text-amber-500`}>{linkedHabit.title}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+                                <button onClick={() => deleteJournalEntry(entry.id)} className="opacity-0 group-hover:opacity-100 p-2 text-slate-300 hover:text-rose-500 transition-all">
+                                    <Trash2 size={16}/>
+                                </button>
+                            </div>
+
+                            <div className="space-y-4">
+                                {entry.imageData && (
+                                    <div className="w-full h-40 rounded-3xl overflow-hidden shadow-inner border border-slate-50 dark:border-slate-800">
+                                        <img src={entry.imageData} className="w-full h-full object-cover" alt="Memory" />
+                                    </div>
+                                )}
+                                <p className="text-slate-700 dark:text-slate-200 text-sm font-medium leading-relaxed">{entry.content}</p>
+                            </div>
+
+                            {entry.aiInsight && (
+                                <div className={`mt-6 ${themeClasses.secondary} ${themeClasses.text} p-4 rounded-3xl text-xs font-bold flex items-center gap-4 border ${themeClasses.border} animate-in zoom-in-95 duration-700`}>
+                                    <div className={`w-8 h-8 rounded-full ${themeClasses.primary} text-white flex items-center justify-center shrink-0 shadow-lg`}>
+                                        <Sparkles size={14} className="animate-pulse" />
+                                    </div>
+                                    <span className="italic leading-snug">"{entry.aiInsight}"</span>
                                 </div>
                             )}
                         </div>
+                    );
+                })}
+            </div>
 
-                        {/* GOAL LINKING DROPDOWN */}
-                        <div className="relative">
-                            <button 
-                                onClick={() => { setShowGoalSelector(!showGoalSelector); setShowTemplateMenu(false); }}
-                                className={`flex items-center gap-2 px-3.5 py-2 rounded-xl text-[12px] font-bold transition-all shadow-sm ${
-                                    selectedGoalId 
-                                    ? `${themeClasses.text} ${themeClasses.secondary} border ${themeClasses.border}` 
-                                    : 'bg-slate-50 dark:bg-slate-800 text-slate-400 dark:text-slate-500 hover:text-slate-600 border border-slate-100 dark:border-slate-700'
-                                }`}
-                            >
-                                {selectedGoalId ? <><Target size={14}/> {goals.find(g => g.id === selectedGoalId)?.title}</> : t('link_goal_btn')}
-                            </button>
-                            {showGoalSelector && (
-                                <div className="absolute top-full left-0 mt-3 w-64 bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-3xl shadow-xl border border-slate-100 dark:border-slate-800 z-[150] p-2 animate-in fade-in zoom-in-95">
-                                    <div className="max-h-48 overflow-y-auto no-scrollbar">
+            {/* IMMERSIVE EDITOR */}
+            {showEditor && (
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="absolute inset-0 bg-slate-900/40 backdrop-blur-xl" onClick={resetEditor} />
+                    
+                    <div className={`bg-white dark:bg-slate-900 w-full max-w-lg rounded-[3.5rem] p-8 md:p-10 shadow-2xl relative animate-in zoom-in-95 duration-300 flex flex-col max-h-[90vh] overflow-hidden border border-white/20`}>
+                        {/* Dynamic Background Glow */}
+                        <div className={`absolute top-0 left-1/2 -translate-x-1/2 w-full h-32 blur-[80px] -z-10 transition-colors duration-1000 ${currentMoodConfig?.color.replace('text', 'bg')} opacity-20`} />
+                        
+                        <div className="flex justify-between items-center mb-6 shrink-0">
+                            <div className="flex items-center gap-3">
+                                <div className={`p-2 rounded-2xl bg-slate-50 dark:bg-slate-800 text-slate-400`}>
+                                    <Calendar size={18} />
+                                </div>
+                                <h2 className="text-lg font-black tracking-tight dark:text-white">Reflection Space</h2>
+                            </div>
+                            <button onClick={resetEditor} className="p-3 text-slate-300 hover:text-slate-600 transition-all"><X size={20}/></button>
+                        </div>
+
+                        <div className="flex-1 overflow-y-auto no-scrollbar space-y-6 pr-1">
+                            {/* GUIDED PROMPT */}
+                            <div className={`p-5 rounded-[2rem] bg-slate-50/50 dark:bg-slate-800/40 border-l-8 ${themeClasses.border} shadow-sm`}>
+                                <p className="text-[9px] font-black uppercase tracking-widest text-slate-400 mb-1">Guided Prompt</p>
+                                <p className="text-[13px] font-bold text-slate-600 dark:text-slate-300 italic leading-relaxed">
+                                    {dailyBriefing?.journalPrompt || "How did today contribute to your long-term vision?"}
+                                </p>
+                            </div>
+
+                            {/* SMART LINKING SYSTEM */}
+                            <div className="space-y-4 bg-slate-50/30 dark:bg-slate-800/20 p-5 rounded-[2.5rem] border border-slate-50 dark:border-slate-800">
+                                <div className="flex justify-between items-center px-1">
+                                    <label className="text-[9px] font-black uppercase text-slate-400 tracking-[0.2em]">Connect Context</label>
+                                    <div className="flex items-center gap-2 bg-white dark:bg-slate-900 px-3 py-1 rounded-full border border-slate-100 dark:border-slate-800">
+                                        <Search size={10} className="text-slate-300" />
+                                        <input 
+                                            value={linkFilter}
+                                            onChange={e => setLinkFilter(e.target.value)}
+                                            placeholder="Find..."
+                                            className="bg-transparent text-[10px] font-bold outline-none w-16 dark:text-white"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3">
+                                    {/* HABIT PILLS */}
+                                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
                                         <button 
-                                            onClick={() => { setSelectedGoalId(''); setShowGoalSelector(false); }} 
-                                            className="w-full text-left p-4 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-2xl text-[11px] font-bold text-slate-400"
+                                            onClick={() => setLinkedHabitId('')}
+                                            className={`px-3 py-2 rounded-full text-[8px] font-black uppercase tracking-widest border transition-all whitespace-nowrap ${linkedHabitId === '' ? 'bg-amber-500 text-white border-transparent' : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-100'}`}
                                         >
-                                            {t('no_goal')}
+                                            No Habit
                                         </button>
-                                        {goals.map(g => (
+                                        {sortedHabits.map(h => (
                                             <button 
-                                                key={g.id} 
-                                                onClick={() => { setSelectedGoalId(g.id); setShowGoalSelector(false); }} 
-                                                className={`w-full text-left p-4 hover:bg-slate-50 dark:hover:bg-slate-800 rounded-2xl text-[11px] font-bold ${selectedGoalId === g.id ? `${themeClasses.text} ${themeClasses.secondary}` : 'text-slate-700 dark:text-slate-200'}`}
+                                                key={h.id}
+                                                onClick={() => {
+                                                    setLinkedHabitId(h.id);
+                                                    if (h.linkedGoalId) setLinkedGoalId(h.linkedGoalId);
+                                                }}
+                                                className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-[8px] font-black uppercase tracking-widest border transition-all whitespace-nowrap ${linkedHabitId === h.id ? 'bg-amber-500 text-white border-transparent shadow-lg' : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-100'}`}
                                             >
+                                                <Zap size={10} />
+                                                {h.title}
+                                            </button>
+                                        ))}
+                                    </div>
+
+                                    {/* GOAL PILLS */}
+                                    <div className="flex gap-2 overflow-x-auto no-scrollbar pb-1">
+                                        <button 
+                                            onClick={() => setLinkedGoalId('')}
+                                            className={`px-3 py-2 rounded-full text-[8px] font-black uppercase tracking-widest border transition-all whitespace-nowrap ${linkedGoalId === '' ? `${themeClasses.primary} text-white border-transparent` : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-100'}`}
+                                        >
+                                            No Goal
+                                        </button>
+                                        {sortedGoals.map(g => (
+                                            <button 
+                                                key={g.id}
+                                                onClick={() => setLinkedGoalId(g.id)}
+                                                className={`flex items-center gap-1.5 px-3 py-2 rounded-full text-[8px] font-black uppercase tracking-widest border transition-all whitespace-nowrap ${linkedGoalId === g.id ? `${themeClasses.primary} text-white border-transparent shadow-lg` : 'bg-white dark:bg-slate-900 text-slate-400 border-slate-100'}`}
+                                            >
+                                                <Target size={10} />
                                                 {g.title}
                                             </button>
                                         ))}
                                     </div>
                                 </div>
-                            )}
-                        </div>
-                    </div>
+                            </div>
 
-                    <textarea
-                        autoFocus
-                        value={content}
-                        onChange={(e) => setContent(e.target.value)}
-                        placeholder={t('write_thoughts')}
-                        className="w-full bg-transparent resize-none outline-none text-slate-800 dark:text-slate-100 placeholder:text-slate-200 dark:placeholder:text-slate-700 text-[18px] font-medium min-h-[180px]"
-                    />
-
-                    <div className="flex justify-between items-center py-6">
-                        {MOODS.map((m, idx) => (
-                            <button 
-                                key={idx}
-                                onClick={() => setMoodIndex(idx)}
-                                className={`flex flex-col items-center gap-2 px-3 py-2 rounded-2xl transition-all ${moodIndex === idx ? themeClasses.secondary : ''}`}
-                            >
-                                <span className={`text-2xl transition-transform ${moodIndex === idx ? 'scale-110' : 'opacity-40 grayscale'}`}>{m.emoji}</span>
-                                <span className={`text-[11px] font-bold ${moodIndex === idx ? themeClasses.text : 'text-slate-300 dark:text-slate-700'}`}>{m.label}</span>
-                            </button>
-                        ))}
-                    </div>
-
-                    <div className="space-y-4">
-                        <label className="text-[11px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-widest block ml-1">{t('busy_label')}</label>
-                        <div className="flex flex-wrap gap-3">
-                            {STANDARD_ACTIVITY_KEYS.map(actKey => (
-                                <div
-                                    key={actKey}
-                                    onClick={() => toggleActivity(actKey)}
-                                    className={`relative px-4 py-2 rounded-xl text-[12px] font-bold transition-all border flex items-center gap-2 cursor-pointer ${selectedActivities.includes(actKey) ? `${themeClasses.secondary} ${themeClasses.border} ${themeClasses.text}` : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-800 text-slate-400'}`}
-                                >
-                                    {t(`act_${actKey}`)}
-                                </div>
-                            ))}
-
-                            {customActivities.map(act => (
-                                <div
-                                    key={act.key}
-                                    onClick={() => toggleActivity(act.key)}
-                                    className={`relative group px-4 py-2 rounded-xl text-[12px] font-bold transition-all border flex items-center gap-2 cursor-pointer ${selectedActivities.includes(act.key) ? `${themeClasses.secondary} ${themeClasses.border} ${themeClasses.text}` : 'bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-800 text-slate-400'}`}
-                                >
-                                    {act.label}
-                                    <button 
-                                        onClick={(e) => deleteCustomTag(e, act.key)}
-                                        className="opacity-0 group-hover:opacity-100 transition-opacity p-0.5 hover:bg-red-100 hover:text-red-500 rounded-full"
-                                    >
-                                        <X size={10} />
-                                    </button>
-                                </div>
-                            ))}
-                            
-                            {isAddingTag ? (
-                              <div className="flex items-center gap-2 animate-in slide-in-from-left-2">
-                                <input 
-                                  autoFocus
-                                  value={newTagInput}
-                                  onChange={e => setNewTagInput(e.target.value)}
-                                  onKeyDown={e => e.key === 'Enter' && addCustomTag()}
-                                  className={`px-4 py-2 rounded-xl text-[12px] font-medium border ${themeClasses.border} outline-none w-28 bg-white dark:bg-slate-800 dark:text-white`}
-                                  placeholder={t('tag_name_ph')}
+                            {/* MAIN EDITOR */}
+                            <div className="space-y-4">
+                                <textarea 
+                                    autoFocus
+                                    value={content} 
+                                    onChange={e => setContent(e.target.value)} 
+                                    className="w-full min-h-[160px] bg-transparent resize-none outline-none text-lg font-bold text-slate-800 dark:text-white placeholder:text-slate-200 dark:placeholder:text-slate-800 leading-relaxed" 
+                                    placeholder="Speak your truth..."
                                 />
-                                <button onClick={addCustomTag} className={`${themeClasses.text} hover:scale-110 transition-transform`}><Check size={18}/></button>
-                                <button onClick={() => {setIsAddingTag(false); setNewTagInput('');}} className="text-slate-400 hover:text-slate-600"><X size={18}/></button>
-                              </div>
-                            ) : (
-                              <button 
-                                onClick={() => setIsAddingTag(true)}
-                                className={`px-4 py-2 rounded-xl text-[12px] font-medium text-slate-300 border border-slate-50 dark:border-slate-800 dark:bg-slate-800/40 italic flex items-center gap-2 hover:${themeClasses.text} transition-colors`}
-                              >
-                                <Plus size={14} /> {t('tag_ph')}
-                              </button>
-                            )}
+                                
+                                {attachedImage && (
+                                    <div className="relative w-full h-40 rounded-[2rem] overflow-hidden border-2 border-slate-100 dark:border-slate-800">
+                                        <img src={attachedImage} className="w-full h-full object-cover" alt="Memory" />
+                                        <button onClick={() => setAttachedImage(null)} className="absolute top-2 right-2 bg-black/50 text-white p-1.5 rounded-full"><X size={14}/></button>
+                                    </div>
+                                )}
+                            </div>
+
+                            {/* MOOD SELECTION */}
+                            <div className="space-y-3 pt-4 border-t border-slate-50 dark:border-slate-800">
+                                <p className="text-[9px] font-black uppercase text-slate-400 tracking-[0.2em] ml-1">Current State</p>
+                                <div className="flex justify-between items-center bg-slate-50 dark:bg-slate-800/50 p-2 rounded-[2.5rem]">
+                                    {MOODS.map(m => (
+                                        <button 
+                                            key={m.key} 
+                                            onClick={() => setMood(m.key as any)} 
+                                            className={`flex flex-col items-center p-3 rounded-full transition-all ${mood === m.key ? `bg-white dark:bg-slate-700 scale-110 shadow-md ${m.color}` : 'opacity-30 grayscale'}`}
+                                        >
+                                            <span className="text-2xl">{m.emoji}</span>
+                                        </button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* TOOLBAR */}
+                        <div className="pt-6 flex justify-between items-center border-t border-slate-50 dark:border-slate-800 shrink-0">
+                             <div className="flex gap-2">
+                                <button onClick={() => fileInputRef.current?.click()} className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-400 active:scale-95"><ImageIcon size={18}/></button>
+                                <input type="file" ref={fileInputRef} onChange={handleImageUpload} accept="image/*" className="hidden" />
+                                <button className="p-3.5 rounded-xl bg-slate-50 dark:bg-slate-800 text-slate-400 active:scale-95"><Camera size={18}/></button>
+                             </div>
+                             
+                             <button 
+                                onClick={handleSubmit} 
+                                disabled={!content.trim() || submitting} 
+                                className={`px-8 py-3.5 rounded-2xl text-white font-black text-[10px] uppercase tracking-widest shadow-xl flex items-center gap-2 bg-gradient-to-br ${themeClasses.gradient} disabled:opacity-50`}
+                             >
+                                {submitting ? <Loader2 className="animate-spin" size={14}/> : <Send size={14}/>}
+                                {submitting ? 'Synthesizing' : 'Seal Entry'}
+                             </button>
                         </div>
                     </div>
-               </div>
-
-                <div className="pt-8 flex justify-between items-center bg-white dark:bg-slate-900 border-t border-slate-50 dark:border-slate-800 mt-auto">
-                    <div className="flex gap-8 text-slate-300">
-                        <button className="hover:text-slate-500 transition-colors"><Mic size={24} /></button>
-                        <button className="hover:text-slate-500 transition-colors"><ImageIcon size={24} /></button>
-                    </div>
-                    <button 
-                        onClick={handleSubmit}
-                        disabled={!content.trim() || submitting}
-                        className={`text-white px-10 py-4.5 rounded-[1.75rem] flex items-center gap-3 font-bold text-base shadow-lg disabled:opacity-30 transition-all active:scale-95 bg-gradient-to-br ${themeClasses.gradient}`}
-                    >
-                        {submitting ? t('reflecting_msg') : <>{editingEntryId ? t('update_entry_btn') : t('save_entry_btn')} <Send size={20} className="ml-1" /></>}
-                    </button>
                 </div>
-           </div>
+            )}
         </div>
-      )}
-    </>
-  );
+    );
 };

@@ -1,12 +1,11 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp, THEMES, APP_VERSION } from '../context/AppContext';
-import { ThemeColor, AppLanguage, ServiceName } from '../types';
+import { ThemeColor, AppLanguage } from '../types';
 import { 
-    User, Palette, Moon, Sun, Globe, Layout, Trash2, Shield, Settings, 
+    User, Palette, Moon, Globe, Trash2, Shield, Settings, 
     Check, Zap, RefreshCw, Lock, FileJson, FileUp, Database, 
     X, Move, ZoomIn, Camera, ImageIcon, Smartphone, Bell,
-    ShieldCheck, Loader2, Pencil, Users, Compass
+    ShieldCheck, Loader2
 } from 'lucide-react';
 import { testApiConnection } from '../services/geminiService';
 
@@ -15,7 +14,7 @@ const AVATARS = ['🌱', '🌿', '🌳', '🚀', '🧠', '✨', '🧘', '🔥', 
 
 export const Profile: React.FC = () => {
     const { 
-        name, avatar, theme, themeColor, language, themeClasses, dashboardLayout, 
+        name, avatar, theme, themeColor, language, themeClasses, 
         notificationSettings, securitySettings,
         updateUserPreferences, deleteAccount, t, setPinCode, exportData, importData, 
         isPersistent, requestPersistence
@@ -61,7 +60,6 @@ export const Profile: React.FC = () => {
         }
     };
 
-    // Image Cropping States
     const [showCropModal, setShowCropModal] = useState(false);
     const [selectedImgSrc, setSelectedImgSrc] = useState<string | null>(null);
     const [zoom, setZoom] = useState(1);
@@ -109,15 +107,15 @@ export const Profile: React.FC = () => {
 
     const onMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
         setIsDragging(true);
-        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+        const clientX = 'touches' in e ? (e as any).touches[0].clientX : (e as any).clientX;
+        const clientY = 'touches' in e ? (e as any).touches[0].clientY : (e as any).clientY;
         setDragStart({ x: clientX - offset.x, y: clientY - offset.y });
     };
 
     const onMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
         if (!isDragging) return;
-        const clientX = 'touches' in e ? e.touches[0].clientX : e.clientX;
-        const clientY = 'touches' in e ? e.touches[0].clientY : e.clientY;
+        const clientX = 'touches' in e ? (e as any).touches[0].clientX : (e as any).clientX;
+        const clientY = 'touches' in e ? (e as any).touches[0].clientY : (e as any).clientY;
         setOffset({
             x: clientX - dragStart.x,
             y: clientY - dragStart.y
@@ -186,7 +184,6 @@ export const Profile: React.FC = () => {
                 <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">{t('profile')}</h1>
             </header>
 
-            {/* IDENTITY SECTION */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-[1.75rem] shadow-sm border border-slate-100 dark:border-slate-800 space-y-6">
                 <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
@@ -210,7 +207,7 @@ export const Profile: React.FC = () => {
                         className="w-14 h-14 rounded-2xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-3xl border border-slate-100 dark:border-slate-700 shadow-inner shrink-0 overflow-hidden relative group"
                     >
                         {isImageAvatar ? (
-                            <img src={avatar} className="w-full h-full object-cover" alt="User" />
+                            <img src={avatar} className="w-full h-full object-cover" alt={name} />
                         ) : (
                             avatar
                         )}
@@ -255,7 +252,6 @@ export const Profile: React.FC = () => {
                 </div>
             </div>
 
-            {/* PREFERENCES SECTION */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-[1.75rem] shadow-sm border border-slate-100 dark:border-slate-800 space-y-6">
                 <div className="flex items-center gap-2">
                     <Settings size={13} className={`shrink-0 ${themeClasses.text}`} />
@@ -269,7 +265,7 @@ export const Profile: React.FC = () => {
                             <span className="text-[8px] font-bold uppercase tracking-widest opacity-60">{t('language')}</span>
                         </div>
                         <div className="grid grid-cols-2 gap-2">
-                            {LANGUAGES.slice(0, 4).map(lang => (
+                            {LANGUAGES.map(lang => (
                                 <button 
                                     key={lang} 
                                     onClick={() => updateUserPreferences({ language: lang })} 
@@ -311,7 +307,7 @@ export const Profile: React.FC = () => {
                                             {isSelected && <Check size={14} className="text-white" strokeWidth={4} />}
                                         </div>
                                         <span className={`text-[10px] font-medium leading-tight text-center truncate w-full ${isSelected ? themeClasses.text : 'text-slate-400 opacity-60'}`}>
-                                            {t(themeItem.name).split('_')[1]}
+                                            {t(themeItem.name)}
                                         </span>
                                     </button>
                                 );
@@ -321,29 +317,6 @@ export const Profile: React.FC = () => {
                 </div>
             </div>
 
-            {/* FOCUS MODE */}
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-[1.75rem] shadow-sm border border-slate-100 dark:border-slate-800 space-y-5">
-                <div className="flex items-center gap-2">
-                    <Layout size={13} className={`shrink-0 ${themeClasses.text}`} />
-                    <h2 className="text-[9px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] break-words leading-none">{t('focus_mode')}</h2>
-                </div>
-                <div className="space-y-4">
-                    {renderToggle(
-                        dashboardLayout.showGrow, 
-                        () => updateUserPreferences({ dashboardLayout: { ...dashboardLayout, showGrow: !dashboardLayout.showGrow } }), 
-                        t('show_grow'),
-                        <Compass size={14} />
-                    )}
-                    {renderToggle(
-                        dashboardLayout.showCommunity, 
-                        () => updateUserPreferences({ dashboardLayout: { ...dashboardLayout, showCommunity: !dashboardLayout.showCommunity } }), 
-                        t('show_community'),
-                        <Users size={14} />
-                    )}
-                </div>
-            </div>
-
-            {/* AI & NOTIFICATIONS */}
             <div className="grid grid-cols-1 gap-6">
                 <div className="bg-white dark:bg-slate-900 p-6 rounded-[1.75rem] shadow-sm border border-slate-100 dark:border-slate-800 space-y-4">
                     <div className="flex items-center justify-between gap-4">
@@ -398,7 +371,6 @@ export const Profile: React.FC = () => {
                 </div>
             </div>
 
-            {/* PRIVACY & SECURITY */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-[1.75rem] shadow-sm border border-slate-100 dark:border-slate-800 space-y-6">
                 <div className="flex items-center gap-2">
                     <Shield size={13} className={`shrink-0 ${themeClasses.text}`} />
@@ -417,7 +389,7 @@ export const Profile: React.FC = () => {
                     },
                     t('persistence_on'),
                     <Database size={14} />,
-                    "STORAGE"
+                    t('storage_label')
                 )}
 
                 <div className="flex flex-col p-5 bg-slate-50/40 dark:bg-slate-800/20 rounded-[1.25rem] border border-slate-100 dark:border-slate-800 shadow-sm gap-3">
@@ -459,19 +431,18 @@ export const Profile: React.FC = () => {
                     <input type="file" ref={importInputRef} onChange={handleImportData} accept=".json" className="hidden" />
                 </div>
 
-                <button onClick={() => { if(confirm(t('delete_data_confirm'))) deleteAccount(); }} className="w-full py-5 text-rose-500 font-bold text-[9px] uppercase tracking-[0.2em] bg-rose-50/40 dark:bg-rose-950/10 rounded-2xl flex items-center justify-center gap-3 border border-rose-100 dark:border-rose-900/20 hover:bg-rose-50 transition-colors shadow-sm">
+                <button onClick={() => { if(confirm(t('delete_account_confirm'))) deleteAccount(); }} className="w-full py-5 text-rose-500 font-bold text-[9px] uppercase tracking-[0.2em] bg-rose-50/40 dark:bg-rose-950/10 rounded-2xl flex items-center justify-center gap-3 border border-rose-100 dark:border-rose-900/20 hover:bg-rose-50 transition-colors shadow-sm">
                     <Trash2 size={13} className="shrink-0" /> <span className="truncate">{t('delete_account')}</span>
                 </button>
             </div>
 
-            {/* IMAGE CROP MODAL */}
             {showCropModal && selectedImgSrc && (
                 <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-300">
                     <div className="bg-white dark:bg-slate-900 w-full max-w-[280px] rounded-[2rem] p-8 shadow-2xl overflow-hidden relative border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-300">
                         <div className="flex justify-between items-center mb-6">
                             <div className="min-w-0">
-                                <h3 className="font-bold text-slate-800 dark:text-slate-50 text-lg tracking-tight truncate">Adjust Photo</h3>
-                                <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest mt-1 truncate">Resize your identity</p>
+                                <h3 className="font-bold text-slate-800 dark:text-slate-50 text-lg tracking-tight truncate">{t('adjust_photo')}</h3>
+                                <p className="text-[8px] text-slate-400 font-bold uppercase tracking-widest mt-1 truncate">{t('resize_identity')}</p>
                             </div>
                             <button onClick={() => {setShowCropModal(false); setSelectedImgSrc(null);}} className="text-slate-300 hover:text-slate-500 transition-colors p-2 bg-slate-50 dark:bg-slate-800 rounded-full shadow-sm shrink-0 ml-4"><X size={16}/></button>
                         </div>
@@ -489,7 +460,7 @@ export const Profile: React.FC = () => {
                             >
                                 <img 
                                     src={selectedImgSrc} 
-                                    alt="To crop" 
+                                    alt={t('adjust_photo')} 
                                     className="pointer-events-none select-none max-w-none origin-center transition-transform duration-75"
                                     style={{
                                         transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
@@ -501,13 +472,13 @@ export const Profile: React.FC = () => {
                             <div className="absolute inset-0 pointer-events-none ring-[100px] ring-white/80 dark:ring-slate-950/80 rounded-full" />
                             <div className="absolute inset-0 pointer-events-none border-[2px] border-dashed border-white/50 rounded-full" />
                             <div className="absolute bottom-4 left-1/2 -translate-x-1/2 bg-black/40 backdrop-blur-md px-3 py-1 rounded-full flex items-center gap-1.5 text-white/60">
-                                <Move size={10}/> <span className="text-[8px] font-bold uppercase tracking-wider">Drag to Move</span>
+                                <Move size={10}/> <span className="text-[8px] font-bold uppercase tracking-wider">{t('drag_move')}</span>
                             </div>
                         </div>
 
                         <div className="space-y-3 mb-8 px-1">
                             <div className="flex justify-between items-center text-slate-400 dark:text-slate-50">
-                                <span className="text-[9px] font-bold uppercase tracking-widest flex items-center gap-1.5"><ZoomIn size={11}/> Zoom</span>
+                                <span className="text-[9px] font-bold uppercase tracking-widest flex items-center gap-1.5"><ZoomIn size={11}/> {t('zoom_label')}</span>
                                 <span className="text-[9px] font-bold">{(zoom * 100).toFixed(0)}%</span>
                             </div>
                             <input 
@@ -526,13 +497,13 @@ export const Profile: React.FC = () => {
                                 onClick={() => {setShowCropModal(false); setSelectedImgSrc(null);}}
                                 className="py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest bg-slate-50 dark:bg-slate-800 text-slate-500 transition-all active:scale-95 border border-slate-100 dark:border-slate-800 shadow-sm truncate"
                             >
-                                Back
+                                {t('back')}
                             </button>
                             <button 
                                 onClick={handleSaveCroppedImage}
                                 className={`py-3 rounded-xl font-bold text-[10px] uppercase tracking-widest text-white bg-gradient-to-br ${themeClasses.gradient} shadow-lg active:scale-95 transition-all truncate`}
                             >
-                                Save
+                                {t('save')}
                             </button>
                         </div>
                         <canvas ref={cropCanvasRef} className="hidden" />

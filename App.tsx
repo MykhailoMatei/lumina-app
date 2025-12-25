@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { useApp } from './context/AppContext';
 import { AppProvider } from './context/AppContext';
@@ -7,14 +6,12 @@ import { Goals } from './pages/Goals';
 import { Journal } from './pages/Journal';
 import { Insights } from './pages/Insights';
 import { Profile } from './pages/Profile';
-import { Inspiration } from './pages/Inspiration';
-import { Community } from './pages/Community';
 import { Navigation } from './components/Navigation';
-import { NotificationSystem } from './components/NotificationSystem';
 import { SecurityLock } from './components/SecurityLock';
+import { NotificationSystem } from './components/NotificationSystem';
 
 const AppContent: React.FC = () => {
-  const { isLocked, theme } = useApp();
+  const { isLocked } = useApp();
   const [view, setView] = useState('dashboard');
 
   if (isLocked) {
@@ -31,10 +28,6 @@ const AppContent: React.FC = () => {
         return <Journal />;
       case 'insights':
         return <Insights />;
-      case 'inspiration':
-        return <Inspiration />;
-      case 'community':
-        return <Community />;
       case 'profile':
         return <Profile />;
       default:

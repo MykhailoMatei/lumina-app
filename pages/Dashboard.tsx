@@ -1,541 +1,481 @@
+
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
-import { Check, Plus, Flame, Sun, X, Trash2, Sparkles, Target, Clock, Moon, TrendingUp, Bell, Loader2, ShieldCheck, ShieldAlert, FileDown, ChevronDown, ChevronUp, AlertCircle, Layers, Crown, Trophy } from 'lucide-react';
-import { generateDailyBriefing, translateDailyBriefing } from '../services/geminiService';
-import { Habit, Goal } from '../types';
+import { 
+    Check, Flame, Sun, Moon, Clock, Sparkles, Trophy, 
+    ChevronDown, ChevronUp, Zap, Star, Plus, X, Link, ArrowRight, Loader2, Coffee, Sunset, Target, Play, Pencil, Trash2
+} from 'lucide-react';
+import { generateDailyBriefing, suggestAtomicHabit } from '../services/geminiService';
+import { Habit } from '../types';
 
-interface DashboardProps {
-  setView: (v: string) => void;
-}
+export const Dashboard: React.FC<{ setView: (v: string) => void }> = ({ setView }) => {
+    const { 
+        name, avatar, goals, habits, journalEntries, toggleHabitCompletion, addHabit, updateHabit, deleteHabit,
+        themeClasses, language, t, dailyBriefing, lastBriefingUpdate, 
+        updateUserPreferences 
+    } = useApp();
+    
+    const [isBriefingExpanded, setIsBriefingExpanded] = useState(false);
+    const [showHabitModal, setShowHabitModal] = useState(false);
+    const [editingHabitId, setEditingHabitId] = useState<string | null>(null);
 
-export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
-  const { 
-    name, avatar, goals, habits, journalEntries, addHabit, updateHabit, deleteHabit, toggleHabitCompletion, 
-    themeClasses, language, t, dashboardLayout, lastExportTimestamp, exportData,
-    dailyBriefing, lastBriefingUpdate, lastBriefingLanguage, updateUserPreferences
-  } = useApp();
-  
-  const [loading, setLoading] = useState(false);
-  const [showModal, setShowModal] = useState(false);
-  const [editingHabitId, setEditingHabitId] = useState<string | null>(null);
-  const [isBriefingExpanded, setIsBriefingExpanded] = useState(false);
-  
-  const [userExpandedRoutines, setUserExpandedRoutines] = useState<Record<string, boolean>>({});
+    // Habit Navigator State
+    const currentHour = new Date().getHours();
+    const initialTab = useMemo(() => {
+        if (currentHour >= 5 && currentHour < 12) return 'Morning';
+        if (currentHour >= 12 && currentHour < 17) return 'Afternoon';
+        if (currentHour >= 17 && currentHour < 22) return 'Evening';
+        return 'Anytime';
+    }, [currentHour]);
+    
+    const [activeHabitTab, setActiveHabitTab] = useState<'Morning' | 'Afternoon' | 'Evening' | 'Anytime'>(initialTab);
 
-  // Form State
-  const [habitTitle, setHabitTitle] = useState('');
-  const [habitTime, setHabitTime] = useState<'Morning' | 'Afternoon' | 'Evening' | 'Anytime'>('Anytime');
-  const [linkedGoalId, setLinkedGoalId] = useState('');
-  const [reminderTime, setReminderTime] = useState('');
-  const [showGoalSelector, setShowGoalSelector] = useState(false);
-  const [showTimeSelector, setShowTimeSelector] = useState(false);
+    // New Habit Form State
+    const [habitTitle, setHabitTitle] = useState('');
+    const [habitTrigger, setHabitTrigger] = useState('');
+    const [habitDuration, setHabitDuration] = useState('5m');
+    const [habitTime, setHabitTime] = useState<'Morning' | 'Afternoon' | 'Evening' | 'Anytime'>(initialTab);
+    const [linkedGoalId, setLinkedGoalId] = useState('');
+    const [isAtomizing, setIsAtomizing] = useState(false);
 
-  const today = new Date().toISOString().split('T')[0];
-  const currentHour = new Date().getHours();
+    const today = new Date().toISOString().split('T')[0];
 
-  const dailyStats = useMemo(() => {
-    if (habits.length === 0) return { percent: 0, isPerfect: false, done: 0, total: 0 };
-    const total = habits.length;
-    const done = habits.filter(h => h.completedDates.includes(today)).length;
-    const percent = Math.round((done / total) * 100);
-    return { percent, isPerfect: percent === 100, done, total };
-  }, [habits, today]);
-
-  const goalSummary = useMemo(() => {
-    const completed = goals.filter(g => g.completed).length;
-    const total = goals.length;
-    return { completed, total };
-  }, [goals]);
-
-  const momentumMessage = useMemo(() => {
-    const p = dailyStats.percent;
-    if (p === 0) return t('ms_idle');
-    if (p >= 100) return t('ms_100');
-    if (p >= 80) return t('ms_80');
-    if (p >= 60) return t('ms_60');
-    if (p >= 40) return t('ms_40');
-    if (p >= 20) return t('ms_20');
-    return t('ms_idle');
-  }, [dailyStats.percent, t]);
-
-  const currentRoutineKey = useMemo(() => {
-    if (currentHour >= 5 && currentHour < 12) return 'Morning';
-    if (currentHour >= 12 && currentHour < 18) return 'Afternoon';
-    if (currentHour >= 18 && currentHour < 24) return 'Evening';
-    return 'Anytime';
-  }, [currentHour]);
-
-  const TIME_CONSTRAINTS = useMemo(() => ({
-    Morning: { min: '05:00', max: '11:59', label: '05:00 - 12:00', icon: Sun },
-    Afternoon: { min: '12:00', max: '17:59', label: '12:00 - 18:00', icon: Clock },
-    Evening: { min: '18:00', max: '23:59', label: '18:00 - 00:00', icon: Moon },
-    Anytime: { min: '00:00', max: '23:59', label: t('flexible_status'), icon: Layers }
-  }), [t]);
-
-  const isTimeValid = useMemo(() => {
-    if (!reminderTime || habitTime === 'Anytime') return true;
-    const { min, max } = TIME_CONSTRAINTS[habitTime];
-    return reminderTime >= min && reminderTime <= max;
-  }, [reminderTime, habitTime, TIME_CONSTRAINTS]);
-
-  const getRoutineStatus = (timeKey: string) => {
-    if (timeKey === 'Anytime') return t('flexible_status');
-    if (timeKey === currentRoutineKey) return t('current_status');
-    const order = ['Morning', 'Afternoon', 'Evening'];
-    const currentIdx = order.indexOf(currentRoutineKey);
-    const targetIdx = order.indexOf(timeKey);
-    return targetIdx > currentIdx ? t('upcoming_today') : t('earlier_today');
-  };
-
-  const sortedRoutineKeys = useMemo(() => {
-    const timed = ['Morning', 'Afternoon', 'Evening'];
-    if (currentRoutineKey === 'Anytime') return ['Anytime', ...timed];
-    const activeIdx = timed.indexOf(currentRoutineKey);
-    return [currentRoutineKey, ...timed.slice(activeIdx + 1), 'Anytime', ...timed.slice(0, activeIdx).reverse()];
-  }, [currentRoutineKey]);
-
-  const isRoutineExpanded = (timeKey: string) => {
-    if (userExpandedRoutines[timeKey] !== undefined) return userExpandedRoutines[timeKey];
-    return timeKey === currentRoutineKey;
-  };
-
-  const dateLocale = useMemo(() => {
-    switch(language) {
-      case 'Ukrainian': return 'uk-UA';
-      case 'Spanish': return 'es-ES';
-      case 'French': return 'fr-FR';
-      case 'German': return 'de-DE';
-      default: return 'en-US';
-    }
-  }, [language]);
-
-  const formatLocalTime = (time24: string) => {
-    if (!time24) return '';
-    const [hours, mins] = time24.split(':').map(Number);
-    const date = new Date();
-    date.setHours(hours, mins, 0, 0);
-    return new Intl.DateTimeFormat(dateLocale, { hour: 'numeric', minute: '2-digit', hour12: language === 'English' }).format(date);
-  };
-
-  useEffect(() => {
-    const fetchBriefingIfNeeded = async () => {
-        const now = new Date();
-        const mostRecent5AM = new Date();
-        mostRecent5AM.setHours(5, 0, 0, 0);
-        if (now < mostRecent5AM) mostRecent5AM.setDate(mostRecent5AM.getDate() - 1);
+    // Execution Logic: Find the single most important next step
+    const nextAction = useMemo(() => {
+        const pendingHabits = habits.filter(h => !h.completedDates.includes(today));
+        if (pendingHabits.length === 0) return null;
         
-        const isNewDay = !dailyBriefing || !lastBriefingUpdate || (lastBriefingUpdate < mostRecent5AM.getTime());
-        const isLangSwitch = language !== lastBriefingLanguage;
+        // Priority 1: Match current time tab
+        const currentPhaseHabits = pendingHabits.filter(h => h.timeOfDay === initialTab);
+        if (currentPhaseHabits.length > 0) return currentPhaseHabits[0];
+        
+        // Priority 2: "Anytime" habits
+        const anytimeHabits = pendingHabits.filter(h => h.timeOfDay === 'Anytime');
+        if (anytimeHabits.length > 0) return anytimeHabits[0];
 
-        if (isNewDay) {
-            setLoading(true);
-            try {
+        return pendingHabits[0];
+    }, [habits, today, initialTab]);
+
+    const circadian = useMemo(() => {
+        if (currentHour >= 5 && currentHour < 11) return { state: 'Morning', gradient: 'from-amber-200 to-indigo-500', icon: <Sun className="animate-pulse" /> };
+        if (currentHour >= 11 && currentHour < 17) return { state: 'Day', gradient: 'from-blue-400 to-indigo-600', icon: <Clock /> };
+        if (currentHour >= 17 && currentHour < 21) return { state: 'Evening', gradient: 'from-orange-400 to-rose-600', icon: <Moon /> };
+        return { state: 'Night', gradient: 'from-slate-800 to-indigo-950', icon: <Moon /> };
+    }, [currentHour]);
+
+    useEffect(() => {
+        const fetchBriefing = async () => {
+            const now = Date.now();
+            const fiveAM = new Date(); fiveAM.setHours(5,0,0,0);
+            if (new Date() < fiveAM) fiveAM.setDate(fiveAM.getDate() - 1);
+            
+            if (!dailyBriefing || (lastBriefingUpdate || 0) < fiveAM.getTime()) {
                 const briefing = await generateDailyBriefing(name, goals, habits, journalEntries, language);
-                updateUserPreferences({ dailyBriefing: briefing, lastBriefingUpdate: Date.now(), lastBriefingLanguage: language });
-            } finally {
-                setLoading(false);
+                updateUserPreferences({ dailyBriefing: briefing, lastBriefingUpdate: now });
             }
-        } else if (isLangSwitch && dailyBriefing) {
-            setLoading(true);
-            try {
-                const translated = await translateDailyBriefing(dailyBriefing, language);
-                updateUserPreferences({ dailyBriefing: translated, lastBriefingLanguage: language });
-            } finally {
-                setLoading(false);
-            }
+        };
+        fetchBriefing();
+    }, [language, goals.length, habits.length]);
+
+    const handleAtomize = async () => {
+        if (!habitTitle.trim()) return;
+        setIsAtomizing(true);
+        const { suggestion } = await suggestAtomicHabit(habitTitle, language);
+        setHabitTitle(suggestion);
+        setIsAtomizing(false);
+    };
+
+    const resetHabitForm = () => {
+        setHabitTitle('');
+        setHabitTrigger('');
+        setHabitDuration('5m');
+        setHabitTime(initialTab);
+        setLinkedGoalId('');
+        setEditingHabitId(null);
+        setShowHabitModal(false);
+    };
+
+    const handleEditHabit = (h: Habit) => {
+        setEditingHabitId(h.id);
+        setHabitTitle(h.title);
+        setHabitTrigger(h.trigger || '');
+        setHabitDuration(h.duration || '5m');
+        setHabitTime(h.timeOfDay);
+        setLinkedGoalId(h.linkedGoalId || '');
+        setShowHabitModal(true);
+    };
+
+    const handleSaveHabit = (e: React.FormEvent) => {
+        e.preventDefault();
+        if (!habitTitle.trim()) return;
+        
+        if (editingHabitId) {
+            updateHabit(editingHabitId, {
+                title: habitTitle,
+                trigger: habitTrigger,
+                duration: habitDuration,
+                timeOfDay: habitTime,
+                linkedGoalId: linkedGoalId || undefined
+            });
+        } else {
+            addHabit({
+                id: Date.now().toString(),
+                title: habitTitle,
+                trigger: habitTrigger,
+                duration: habitDuration,
+                timeOfDay: habitTime,
+                linkedGoalId: linkedGoalId || undefined,
+                streak: 0,
+                completedDates: []
+            });
+        }
+
+        resetHabitForm();
+    };
+
+    const handleDeleteHabit = () => {
+        if (editingHabitId) {
+            deleteHabit(editingHabitId);
+            resetHabitForm();
         }
     };
-    fetchBriefingIfNeeded();
-  }, [name, language, dailyBriefing, lastBriefingUpdate]);
 
-  const handleOpenCreate = () => {
-    setEditingHabitId(null);
-    setHabitTitle('');
-    setHabitTime(currentRoutineKey as any);
-    setLinkedGoalId('');
-    setReminderTime('');
-    setShowModal(true);
-  };
+    const filteredHabits = habits.filter(h => h.timeOfDay === activeHabitTab);
+    const progress = habits.length > 0 ? Math.round((habits.filter(h => h.completedDates.includes(today)).length / habits.length) * 100) : 0;
 
-  const handleOpenEdit = (habit: Habit) => {
-    setEditingHabitId(habit.id);
-    setHabitTitle(habit.title);
-    setHabitTime(habit.timeOfDay);
-    setLinkedGoalId(habit.linkedGoalId || '');
-    setReminderTime(habit.reminderTime || '');
-    setShowModal(true);
-  };
+    const getTabStats = (time: string) => {
+        const set = habits.filter(h => h.timeOfDay === time);
+        const done = set.filter(h => h.completedDates.includes(today)).length;
+        return { count: set.length, done };
+    };
 
-  const handleSaveHabit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if(!habitTitle.trim() || !isTimeValid) return;
-    if (editingHabitId) {
-        updateHabit(editingHabitId, { title: habitTitle, timeOfDay: habitTime, linkedGoalId: linkedGoalId || undefined, reminderTime: reminderTime || undefined });
-    } else {
-        addHabit({ id: Date.now().toString(), title: habitTitle, timeOfDay: habitTime, streak: 0, completedDates: [], linkedGoalId: linkedGoalId || undefined, reminderTime: reminderTime || undefined });
-    }
-    setShowModal(false);
-  };
-
-  const handleDeleteHabit = (e: React.MouseEvent) => {
-    e.preventDefault();
-    e.stopPropagation();
-    if (editingHabitId && confirm(t('remove_habit_confirm'))) {
-        deleteHabit(editingHabitId);
-        setShowModal(false);
-        setEditingHabitId(null);
-    }
-  };
-
-  const filteredHabits = (time: string) => {
-    return habits.filter((h: Habit) => h.timeOfDay === time).sort((a, b) => (a.reminderTime || '').localeCompare(b.reminderTime || ''));
-  };
-
-  const calculateReliability = (habit: Habit) => {
-    const completions = habit.completedDates.length;
-    return completions === 0 ? 0 : Math.round((completions / Math.max(habit.completedDates.length, 7)) * 100);
-  };
-
-  const weekDates = (() => {
-    const days: string[] = [];
-    for (let i = 6; i >= 0; i--) { 
-        const d = new Date();
-        d.setDate(d.getDate() - i);
-        days.push(d.toISOString().split('T')[0]);
-    }
-    return days;
-  })();
-
-  const isImageAvatar = avatar && (avatar.startsWith('data:image') || avatar.startsWith('http'));
-  const isPerfect = dailyStats.percent === 100;
-
-  const routineOptions = [
-    { key: 'Morning', label: t('morning'), icon: Sun },
-    { key: 'Afternoon', label: t('afternoon'), icon: Clock },
-    { key: 'Evening', label: t('evening'), icon: Moon },
-    { key: 'Anytime', label: t('anytime'), icon: Layers },
-  ];
-
-  const SelectorItem = ({ label, icon: Icon, isSelected, onClick }: any) => (
-    <button 
-      type="button" 
-      onClick={onClick} 
-      className={`w-full flex items-center justify-between px-4 py-3.5 rounded-2xl text-[11px] font-bold transition-all text-left ${
-        isSelected ? `${themeClasses.text} ${themeClasses.secondary}` : 'text-slate-700 dark:text-slate-200 hover:bg-slate-50 dark:hover:bg-slate-800'
-      }`}
-    >
-      <div className="flex items-center gap-3.5 min-w-0 flex-1">
-        {Icon && (
-          <div className={`p-1.5 rounded-lg shrink-0 ${isSelected ? 'bg-white/50 dark:bg-slate-800' : 'bg-slate-50 dark:bg-slate-800/60'}`}>
-            <Icon size={14} className={isSelected ? themeClasses.text : 'text-slate-400'} />
-          </div>
-        )}
-        <span className="leading-tight">{label}</span>
-      </div>
-      {isSelected && <Check size={14} className={`shrink-0 ml-3 ${themeClasses.text}`} strokeWidth={3} />}
-    </button>
-  );
-
-  return (
-    <div className="animate-in fade-in duration-700 relative">
-      <div className="space-y-6">
-        <div className="flex justify-between items-start pt-2">
-          <div className="space-y-1">
-            <p className="text-slate-400 dark:text-slate-500 text-[10px] font-bold uppercase tracking-widest">
-              {new Date().toLocaleDateString(dateLocale, { weekday: 'long', month: 'long', day: 'numeric' })}
-            </p>
-            <h1 className="text-2xl font-bold text-slate-800 dark:text-slate-100 tracking-tight">
-              {currentHour < 12 ? t('good_morning') : currentHour < 18 ? t('good_afternoon') : t('good_evening')}, <span className={themeClasses.text}>{name}</span>
-            </h1>
-            <button onClick={exportData} className={`flex items-center gap-1.5 text-[9px] font-black uppercase tracking-wider px-2.5 py-1 rounded-full border transition-all mt-1 bg-emerald-50 border-emerald-200 text-emerald-600`}>
-              <ShieldCheck size={10}/> {t('backup_ok')}
-              <FileDown size={10} className="ml-0.5 opacity-50" />
-            </button>
-          </div>
-          <button onClick={() => setView('profile')} className="w-12 h-12 rounded-2xl bg-white dark:bg-slate-900 text-2xl flex items-center justify-center border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden active:scale-95 transition-transform">
-              {isImageAvatar ? <img src={avatar} className="w-full h-full object-cover" alt="User" /> : avatar}
-          </button>
-        </div>
-
-        {dashboardLayout.showMetrics && dailyBriefing && (
-          <div onClick={() => setIsBriefingExpanded(!isBriefingExpanded)} className={`rounded-3xl p-5 text-white shadow-lg relative overflow-hidden bg-gradient-to-br ${themeClasses.gradient} cursor-pointer duration-300 ${isBriefingExpanded ? 'scale-[1.01]' : ''}`}>
-              <div className="absolute top-0 right-0 w-32 h-32 bg-white/10 rounded-full -mr-12 -mt-12 blur-2xl pointer-events-none" />
-              <div className="space-y-4 relative z-10">
-                   <div className="flex justify-between items-center opacity-80">
-                      <div className="flex items-center gap-2">
-                         <Sparkles size={14} />
-                         <span className="text-[9px] font-black uppercase tracking-widest">{t('daily_wisdom')}</span>
-                      </div>
-                      {isBriefingExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
-                   </div>
-                   {loading && !isBriefingExpanded ? <div className="h-5 w-2/3 bg-white/20 rounded animate-pulse" /> : (
-                     <p className={`font-bold text-[15px] leading-snug tracking-tight transition-all duration-300 ${isBriefingExpanded ? '' : 'line-clamp-2'}`}>"{dailyBriefing.motivation}"</p>
-                   )}
-                   {isBriefingExpanded && (
-                       <div className="grid grid-cols-1 gap-3 mt-4 pt-2 animate-in fade-in slide-in-from-top-2 duration-300">
-                           <div className="bg-white/10 rounded-xl p-4 backdrop-blur-md border border-white/5">
-                               <h3 className="text-[8px] font-black uppercase opacity-60 mb-2 flex items-center gap-1.5"><Target size={10} /> {t('focus')}</h3>
-                               <p className="text-[12px] font-bold leading-snug">{dailyBriefing.focus}</p>
-                           </div>
-                           <div className="bg-white/10 rounded-xl p-4 backdrop-blur-md border border-white/5">
-                               <h3 className="text-[8px] font-black uppercase opacity-60 mb-2 flex items-center gap-1.5"><Clock size={10} /> {t('micro_tip')}</h3>
-                               <p className="text-[12px] font-bold leading-snug">{dailyBriefing.tip}</p>
-                           </div>
-                       </div>
-                   )}
-              </div>
-          </div>
-        )}
-
-        {/* METRICS ROW: MOMENTUM & GOAL TRACKING */}
-        <div className="grid grid-cols-1 gap-4">
-            <div className={`rounded-[2rem] py-5 px-6 shadow-sm border transition-all duration-700 space-y-4 ${
-                isPerfect 
-                ? 'bg-amber-50/50 dark:bg-amber-900/5 border-amber-200 dark:border-amber-500/10 shadow-amber-500/5' 
-                : 'bg-white dark:bg-slate-900 border-slate-100 dark:border-slate-800'
-            }`}>
-                 <div className="flex justify-between items-center px-1">
-                     <h2 className={`text-[10px] font-black uppercase tracking-widest flex items-center gap-2 ${isPerfect ? 'text-amber-600 dark:text-amber-400/80' : 'text-slate-400'}`}>
-                        {isPerfect ? <Crown size={12} className="text-amber-500 dark:text-amber-400/60" /> : <TrendingUp size={12} className={themeClasses.text}/>} 
-                        {t('momentum_title')}
-                     </h2>
-                     <span className={`text-[10px] font-black ${isPerfect ? 'text-amber-500 dark:text-amber-400/90' : themeClasses.text}`}>
-                        {dailyStats.percent}% {isPerfect && '✨'}
-                     </span>
-                 </div>
-                 <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden relative">
-                     <div 
-                        className={`h-full transition-all duration-1000 ${
-                            isPerfect 
-                            ? 'bg-amber-500 dark:bg-amber-500/80' 
-                            : themeClasses.primary
-                        }`}
-                        style={{ width: `${dailyStats.percent}%` }}
-                     />
-                 </div>
-                 <div className="flex justify-between items-center">
-                    <p className={`text-[10px] font-bold ${isPerfect ? 'text-amber-600 dark:text-amber-400/70' : 'text-slate-400'}`}>
-                        {momentumMessage}
-                    </p>
-                    <div onClick={() => setView('goals')} className="flex items-center gap-1.5 cursor-pointer hover:opacity-70 transition-opacity">
-                         <Trophy size={11} className={goalSummary.completed === goalSummary.total && goalSummary.total > 0 ? 'text-amber-500' : 'text-slate-300'} />
-                         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{goalSummary.completed}/{goalSummary.total} {t('goals').toLowerCase()}</span>
-                    </div>
-                 </div>
-            </div>
-        </div>
-
-        <div className="space-y-4 pb-32">
-            {sortedRoutineKeys.map((timeKey: string) => {
-                const habitsInRoutine = filteredHabits(timeKey);
-                if (habitsInRoutine.length === 0 && timeKey !== currentRoutineKey) return null;
-
-                const completedCount = habitsInRoutine.filter(h => h.completedDates.includes(today)).length;
-                const totalCount = habitsInRoutine.length;
-                const isRoutineDone = totalCount > 0 && completedCount === totalCount;
+    return (
+        <div className="pb-32 space-y-6 animate-in fade-in duration-700">
+            {/* MOMENTUM HUB HEADER */}
+            <div className={`-mx-6 -mt-6 p-8 pt-16 rounded-b-[3.5rem] bg-gradient-to-br ${circadian.gradient} shadow-2xl relative transition-all duration-1000`}>
+                <div className="absolute top-4 right-6 opacity-30">{circadian.icon}</div>
                 
-                const expanded = isRoutineExpanded(timeKey);
-                const toggle = () => setUserExpandedRoutines(prev => ({ ...prev, [timeKey]: !expanded }));
-                const routineLabel = timeKey === 'Morning' ? t('routine_morning') : timeKey === 'Afternoon' ? t('routine_afternoon') : timeKey === 'Evening' ? t('routine_evening') : t('routine_anytime');
-
-                return (
-                    <div key={timeKey} className={`overflow-hidden rounded-[2rem] transition-all duration-500 ${expanded ? 'bg-transparent' : 'bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-800 shadow-sm'}`}>
-                        <div onClick={toggle} className="flex items-center justify-between p-4 cursor-pointer active:bg-slate-50 dark:active:bg-slate-800/20 transition-colors">
-                            <div className="flex items-center gap-3.5 min-w-0">
-                                <div className={`w-10 h-10 rounded-xl flex items-center justify-center shrink-0 border transition-all ${
-                                    isRoutineDone ? 'bg-emerald-100 dark:bg-emerald-500/10 border-emerald-200 dark:border-emerald-500/10 text-emerald-500 dark:text-emerald-500/80' : 
-                                    'bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700/50 text-slate-400'}`}>
-                                   {isRoutineDone ? <Check size={20} strokeWidth={3} /> : (timeKey === 'Morning' ? <Sun size={20}/> : timeKey === 'Evening' ? <Moon size={20}/> : timeKey === 'Afternoon' ? <Clock size={20}/> : <Layers size={20}/>)}
-                                </div>
-                                <div className="min-w-0">
-                                    <div className="flex items-center gap-2">
-                                        <h2 className={`text-xs font-bold truncate ${isRoutineDone ? 'text-emerald-500 dark:text-emerald-500/80 opacity-90' : 'text-slate-800 dark:text-slate-100'}`}>
-                                            {isRoutineDone && !expanded ? routineLabel + ' Done' : routineLabel}
-                                        </h2>
-                                        {!isRoutineDone && <span className={`text-[7px] font-black uppercase px-1.5 py-0.5 rounded-full border ${timeKey === currentRoutineKey ? `${themeClasses.secondary} ${themeClasses.text} border-indigo-200 dark:border-indigo-900/30` : 'bg-slate-50 dark:bg-slate-800/50 text-slate-400 border-slate-100 dark:border-slate-800'}`}>{getRoutineStatus(timeKey)}</span>}
-                                    </div>
-                                    <div className="flex items-center gap-2 mt-0.5">
-                                        <span className="text-[8px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-widest">{TIME_CONSTRAINTS[timeKey as keyof typeof TIME_CONSTRAINTS].label}</span>
-                                        <span className="text-[8px] font-bold text-slate-400 uppercase tracking-widest">{completedCount}/{totalCount}</span>
-                                    </div>
-                                </div>
-                            </div>
-                            {expanded ? <ChevronUp size={16} className="text-slate-300" /> : <ChevronDown size={16} className="text-slate-300" />}
-                        </div>
-
-                        {expanded && (
-                            <div className="space-y-2 animate-in fade-in slide-in-from-top-1 duration-200 px-1 pb-3">
-                                {habitsInRoutine.length === 0 ? (
-                                     <div className="bg-white/50 dark:bg-slate-900/50 p-6 rounded-2xl border border-dashed border-slate-100 dark:border-slate-800 flex flex-col items-center justify-center text-center">
-                                        <p className="text-[9px] font-bold uppercase tracking-[0.2em] text-slate-400">{t('no_habits')}</p>
-                                        <button onClick={handleOpenCreate} className={`mt-2 text-[8px] font-black uppercase tracking-widest ${themeClasses.text} hover:opacity-70 transition-opacity`}>{t('start_routine')}</button>
-                                     </div>
-                                ) : habitsInRoutine.map((h: Habit) => {
-                                    const isDone = h.completedDates.includes(today);
-                                    const linkedGoal = goals.find(g => g.id === h.linkedGoalId);
-                                    return (
-                                        <div key={h.id} className={`bg-white dark:bg-slate-900 p-3.5 rounded-2xl shadow-sm border flex justify-between items-center transition-all ${isDone ? `${themeClasses.border} opacity-70 scale-[0.99] dark:border-emerald-500/10` : 'border-slate-100 dark:border-slate-800/60'}`}>
-                                            <div onClick={() => handleOpenEdit(h)} className="flex-1 min-w-0 pr-3 cursor-pointer">
-                                                <div className="flex items-center gap-2 mb-1 flex-wrap">
-                                                    <h3 className={`font-bold text-sm truncate ${isDone ? 'text-slate-400 line-through' : 'text-slate-800 dark:text-slate-100'}`}>{h.title}</h3>
-                                                    <span className="text-[7px] font-black text-slate-400 uppercase bg-slate-50 dark:bg-slate-800/50 px-1.5 py-0.5 rounded border border-slate-100 dark:border-slate-700">{calculateReliability(h)}% {t('habit_rate')}</span>
-                                                </div>
-                                                <div className="flex items-center gap-2 mb-2">
-                                                    {linkedGoal && <div className={`flex items-center gap-1 text-[8px] font-bold ${themeClasses.text} bg-slate-50 dark:bg-slate-800/60 border ${themeClasses.border} px-1.5 py-0.5 rounded border`}><Target size={8} /> {linkedGoal.title}</div>}
-                                                    {h.reminderTime && <div className="flex items-center gap-1 text-[8px] font-bold text-slate-400 bg-slate-50/50 dark:bg-slate-800/30 px-1.5 py-0.5 rounded border border-slate-100 dark:border-slate-800"><Clock size={8} /> {formatLocalTime(h.reminderTime)}</div>}
-                                                </div>
-                                                <div className="flex items-center gap-3">
-                                                     <div className="flex items-center gap-1"><Flame size={12} fill="currentColor" className={isDone ? 'text-orange-500' : 'text-slate-200'} /><span className={`text-[10px] font-black ${isDone ? 'text-orange-500' : 'text-slate-400'}`}>{h.streak}</span></div>
-                                                     <div className="flex gap-1">
-                                                        {weekDates.map(date => <div key={date} className={`w-1 h-1 rounded-full ${h.completedDates.includes(date) ? themeClasses.primary : (date === today ? 'bg-slate-300' : 'bg-slate-100 dark:bg-slate-800')}`} />)}
-                                                     </div>
-                                                </div>
-                                            </div>
-                                            <button onClick={() => toggleHabitCompletion(h.id, today)} className={`w-10 h-10 rounded-xl flex items-center justify-center transition-all border ${isDone ? `${themeClasses.primary} border-transparent dark:opacity-80 text-white shadow` : 'bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700/50 text-slate-200 hover:text-slate-400 active:scale-90'}`}><Check size={20} strokeWidth={4} /></button>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        )}
+                {/* REFINED PROFILE BUTTON SIZE */}
+                <button 
+                    onClick={() => setView('profile')} 
+                    className="absolute top-14 right-6 w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center text-2xl shadow-lg hover:scale-105 active:scale-95 transition-all overflow-hidden z-20 group"
+                    aria-label="Profile"
+                >
+                    <div className="w-full h-full flex items-center justify-center transition-transform group-active:scale-95">
+                        {avatar && avatar.startsWith('data') ? <img src={avatar} className="w-full h-full object-cover" /> : avatar || '🌱'}
                     </div>
-                );
-            })}
+                </button>
+
+                <div className="space-y-4 relative z-10">
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-60 text-white">Day Perspective</p>
+                    <h1 className="text-3xl font-black text-white tracking-tighter pr-16">
+                        {currentHour < 12 ? t('good_morning') : currentHour < 18 ? t('good_afternoon') : t('good_evening')}, {name.split(' ')[0]}
+                    </h1>
+
+                    {/* THE "NEXT MOVE" CTA: High Visibility Action Step */}
+                    {nextAction ? (
+                        <button 
+                            onClick={() => toggleHabitCompletion(nextAction.id, today)}
+                            className="w-full bg-white text-slate-900 rounded-[2rem] p-4 flex items-center justify-between shadow-2xl active:scale-[0.97] transition-all group overflow-hidden"
+                        >
+                            <div className="flex items-center gap-3">
+                                <div className={`${themeClasses.primary} p-2 rounded-xl text-white group-hover:scale-110 transition-transform`}>
+                                    <Play size={16} fill="currentColor" />
+                                </div>
+                                <div className="text-left">
+                                    <p className="text-[8px] font-black uppercase text-slate-400 tracking-[0.15em]">Next Move</p>
+                                    <h4 className="text-sm font-black truncate max-w-[180px]">
+                                        {nextAction.title} <span className="opacity-40 ml-1 text-[10px]">({nextAction.duration || '5m'})</span>
+                                    </h4>
+                                </div>
+                            </div>
+                            <ArrowRight size={18} className="text-slate-300 group-hover:translate-x-1 transition-transform" />
+                        </button>
+                    ) : (
+                        <div className="w-full bg-white/10 backdrop-blur-md rounded-[2rem] p-4 flex items-center justify-center text-white/80 border border-white/10">
+                            <Check className="mr-2" size={16} strokeWidth={3} />
+                            <span className="text-xs font-black uppercase tracking-widest">Rituals Complete</span>
+                        </div>
+                    )}
+                    
+                    {dailyBriefing && (
+                        <div onClick={() => setIsBriefingExpanded(!isBriefingExpanded)} className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-[2rem] p-5 cursor-pointer hover:bg-white/15 transition-all">
+                            <div className="flex justify-between items-center opacity-80 mb-2">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-white flex items-center gap-2"><Sparkles size={12} /> {t('daily_wisdom')}</span>
+                                {isBriefingExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                            </div>
+                            <p className={`text-white font-bold text-sm italic leading-snug ${isBriefingExpanded ? '' : 'line-clamp-1'}`}>"{dailyBriefing.motivation}"</p>
+                            {isBriefingExpanded && (
+                                <div className="grid grid-cols-2 gap-3 mt-4 animate-in zoom-in-95">
+                                    <div className="bg-black/10 rounded-2xl p-3 border border-white/5">
+                                        <h3 className="text-[8px] font-black uppercase opacity-60 text-white mb-1">Focus</h3>
+                                        <p className="text-xs font-bold text-white">{dailyBriefing.focus}</p>
+                                    </div>
+                                    <div className="bg-black/10 rounded-2xl p-3 border border-white/5">
+                                        <h3 className="text-[8px] font-black uppercase opacity-60 text-white mb-1">Action</h3>
+                                        <p className="text-xs font-bold text-white">{dailyBriefing.tip}</p>
+                                    </div>
+                                </div>
+                            )}
+                        </div>
+                    )}
+                </div>
+            </div>
+
+            {/* KEYSTONE TASK */}
+            {dailyBriefing?.priorityTask && (
+                <div className={`bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] border-2 ${themeClasses.border} shadow-lg animate-in slide-in-from-bottom-4 duration-500`}>
+                    <div className="flex items-center gap-3 mb-3">
+                        <div className={`w-8 h-8 rounded-full ${themeClasses.primary} flex items-center justify-center text-white shadow-lg`}><Zap size={16} /></div>
+                        <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t('keystone')}</h2>
+                    </div>
+                    {/* Balanced text size and weight */}
+                    <p className="text-[15px] font-bold text-slate-700 dark:text-slate-200 leading-snug mb-4">{dailyBriefing.priorityTask}</p>
+                    <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div className={`h-full ${themeClasses.primary} transition-all duration-1000`} style={{ width: `${progress}%` }} />
+                    </div>
+                </div>
+            )}
+
+            {/* RITUAL NAVIGATOR */}
+            <div className="space-y-4">
+                <div className="flex justify-between items-center px-1">
+                    <h3 className="text-[10px] font-black uppercase tracking-widest text-slate-400">Ritual Stacks</h3>
+                    <button onClick={() => { setEditingHabitId(null); setShowHabitModal(true); }} className={`${themeClasses.text} p-1 hover:bg-slate-100 dark:hover:bg-slate-800 rounded-lg transition-colors`}>
+                        <Plus size={18} strokeWidth={3} />
+                    </button>
+                </div>
+
+                <div className="flex gap-2 overflow-x-auto no-scrollbar -mx-1 px-1">
+                    {(['Morning', 'Afternoon', 'Evening', 'Anytime'] as const).map(time => {
+                        const stats = getTabStats(time);
+                        const isActive = activeHabitTab === time;
+                        const isCurrentTime = initialTab === time;
+                        
+                        return (
+                            <button
+                                key={time}
+                                onClick={() => setActiveHabitTab(time)}
+                                className={`flex flex-col min-w-[95px] p-4 rounded-[1.75rem] border-2 transition-all relative ${
+                                    isActive 
+                                    ? `${themeClasses.secondary} ${themeClasses.border} shadow-indigo-100/50 dark:shadow-none shadow-lg` 
+                                    : 'bg-white dark:bg-slate-900 border-slate-50 dark:border-slate-800/50 opacity-60'
+                                }`}
+                            >
+                                {isCurrentTime && (
+                                    <div className="absolute top-2 right-2 w-2 h-2 rounded-full bg-amber-500 animate-pulse shadow-[0_0_8px_rgba(245,158,11,0.6)] z-10" />
+                                )}
+                                <div className="flex justify-between items-center mb-1">
+                                    {time === 'Morning' && <Coffee size={12} className={isActive ? themeClasses.text : 'text-slate-400'} />}
+                                    {time === 'Afternoon' && <Sun size={12} className={isActive ? themeClasses.text : 'text-slate-400'} />}
+                                    {time === 'Evening' && <Sunset size={12} className={isActive ? themeClasses.text : 'text-slate-400'} />}
+                                    {time === 'Anytime' && <Zap size={12} className={isActive ? themeClasses.text : 'text-slate-400'} />}
+                                    <span className="text-[8px] font-black text-slate-400">{stats.done}/{stats.count}</span>
+                                </div>
+                                <span className={`text-[9px] font-black uppercase tracking-tight text-left ${isActive ? 'text-slate-900 dark:text-white' : 'text-slate-500'}`}>{time}</span>
+                            </button>
+                        );
+                    })}
+                </div>
+                
+                <div className="space-y-3 min-h-[150px]">
+                    {filteredHabits.length === 0 ? (
+                        <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-3 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-[2.5rem]">
+                            <Plus size={24} className="opacity-20" />
+                            <p className="text-[10px] font-black uppercase tracking-widest opacity-40">No {activeHabitTab} Rituals</p>
+                            <button onClick={() => { setEditingHabitId(null); setHabitTime(activeHabitTab); setShowHabitModal(true); }} className={`text-[9px] font-black uppercase tracking-widest ${themeClasses.text}`}>Add One Now</button>
+                        </div>
+                    ) : (
+                        filteredHabits.sort((a, b) => {
+                            const aDone = a.completedDates.includes(today);
+                            const bDone = b.completedDates.includes(today);
+                            if (aDone && !bDone) return 1;
+                            if (!aDone && bDone) return -1;
+                            return 0;
+                        }).map(h => {
+                            const linkedGoal = goals.find(g => g.id === h.linkedGoalId);
+                            const isDone = h.completedDates.includes(today);
+                            return (
+                                <div key={h.id} className={`bg-white dark:bg-slate-900 p-4 rounded-[2rem] border transition-all flex items-center shadow-sm group ${isDone ? 'opacity-40 border-transparent bg-slate-50/30 dark:bg-slate-800/20 scale-[0.98]' : 'border-slate-100 dark:border-slate-800 hover:shadow-md'}`}>
+                                    <div className="min-w-0 flex-1">
+                                        <div className="flex items-center gap-2 mb-0.5">
+                                            <h4 className={`font-black text-sm leading-tight ${isDone ? 'text-slate-400 line-through' : 'text-slate-800 dark:text-white'}`}>{h.title}</h4>
+                                            {h.duration && <span className="text-[9px] font-bold text-slate-400">({h.duration})</span>}
+                                            <button 
+                                                onClick={(e) => { e.stopPropagation(); handleEditHabit(h); }}
+                                                className="opacity-0 group-hover:opacity-100 p-1 text-slate-300 hover:text-slate-500 transition-all ml-1"
+                                            >
+                                                <Pencil size={12} />
+                                            </button>
+                                        </div>
+                                        <div className="flex items-center gap-3">
+                                            <div className="flex items-center gap-1">
+                                                <Flame size={10} className={isDone ? 'text-slate-300' : 'text-orange-500'} />
+                                                <span className={`text-[9px] font-black ${isDone ? 'text-slate-300' : 'text-orange-500'}`}>{h.streak}d</span>
+                                            </div>
+                                            {linkedGoal && !isDone && (
+                                                <div className={`flex items-center gap-1.5 px-2 py-0.5 rounded-full ${themeClasses.secondary} border ${themeClasses.border}`}>
+                                                    <Target size={9} className={themeClasses.text} />
+                                                    <span className={`text-[8px] font-black uppercase tracking-tighter ${themeClasses.text}`}>{linkedGoal.title}</span>
+                                                </div>
+                                            )}
+                                        </div>
+                                        {h.trigger && !isDone && (
+                                            <span className="text-[7px] font-black uppercase tracking-widest text-slate-300 block mt-1">
+                                                Trigger: After {h.trigger}
+                                            </span>
+                                        )}
+                                    </div>
+                                    <button 
+                                        onClick={() => toggleHabitCompletion(h.id, today)}
+                                        className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all shrink-0 ml-4 ${isDone ? `${themeClasses.primary} text-white shadow-lg` : 'bg-slate-50 dark:bg-slate-800 text-slate-300 border border-slate-100 dark:border-slate-700'}`}
+                                    >
+                                        <Check size={20} strokeWidth={4} />
+                                    </button>
+                                </div>
+                            );
+                        })
+                    )}
+                </div>
+            </div>
+
+            {/* HUMANIZED METRICS OVERVIEW */}
+            <div className="grid grid-cols-2 gap-4">
+                <div onClick={() => setView('insights')} className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm cursor-pointer active:scale-95 transition-all flex flex-col gap-3">
+                    <div className="flex justify-between items-start">
+                        <div className={`w-8 h-8 rounded-xl ${themeClasses.secondary} ${themeClasses.text} flex items-center justify-center`}>
+                            <Star size={16} fill="currentColor" />
+                        </div>
+                        <span className={`text-[11px] font-black ${themeClasses.text}`}>{progress}%</span>
+                    </div>
+                    <div>
+                        <h3 className="text-[10px] font-black uppercase text-slate-800 dark:text-white mb-1">{t('habit_rate')}</h3>
+                        <p className="text-[9px] font-medium text-slate-400 leading-tight">{t('routine_desc')}</p>
+                    </div>
+                </div>
+                <div onClick={() => setView('goals')} className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm cursor-pointer active:scale-95 transition-all flex flex-col gap-3">
+                    <div className="flex justify-between items-start">
+                        <div className={`w-8 h-8 rounded-xl ${themeClasses.secondary} ${themeClasses.text} flex items-center justify-center`}>
+                            <Trophy size={16} />
+                        </div>
+                        <span className={`text-[11px] font-black ${themeClasses.text}`}>{goals.length}</span>
+                    </div>
+                    <div>
+                        <h3 className="text-[10px] font-black uppercase text-slate-800 dark:text-white mb-1">{t('goals')}</h3>
+                        <p className="text-[9px] font-medium text-slate-400 leading-tight">{t('momentum_desc')}</p>
+                    </div>
+                </div>
+            </div>
+
+            {/* CREATE/EDIT HABIT MODAL */}
+            {showHabitModal && (
+                <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-300">
+                    <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[3rem] p-10 shadow-2xl border border-slate-100 dark:border-slate-800 relative animate-in zoom-in-95 duration-300 overflow-hidden flex flex-col max-h-[85vh]">
+                        <button onClick={resetHabitForm} className="absolute top-6 right-6 p-2 text-slate-300 hover:text-slate-500 transition-colors">
+                            <X size={20}/>
+                        </button>
+                        
+                        <form onSubmit={handleSaveHabit} className="space-y-8 flex-1 overflow-y-auto no-scrollbar pr-1 pb-4">
+                            <div className="text-center">
+                                <h2 className="text-2xl font-black tracking-tight text-slate-800 dark:text-white">
+                                    {editingHabitId ? 'Edit Ritual' : 'New Ritual'}
+                                </h2>
+                                <p className="text-[10px] font-bold uppercase tracking-[0.2em] text-slate-400 mt-2">Define Your Daily Discipline</p>
+                            </div>
+
+                            <div className="space-y-6">
+                                <div className="space-y-4">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-[10px] font-black uppercase text-slate-300 tracking-widest shrink-0">After I</span>
+                                        <input 
+                                            value={habitTrigger}
+                                            onChange={e => setHabitTrigger(e.target.value)}
+                                            placeholder="pour my coffee..."
+                                            className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 text-sm font-bold border-none outline-none focus:ring-2 focus:ring-indigo-500/10 dark:text-white"
+                                        />
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <ArrowRight className="text-slate-200 shrink-0" size={16} />
+                                        <div className="w-full relative">
+                                            <input 
+                                                required 
+                                                value={habitTitle} 
+                                                onChange={e => setHabitTitle(e.target.value)} 
+                                                className={`w-full bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 text-sm font-bold border-none outline-none focus:ring-2 focus:ring-indigo-500/10 dark:text-white pr-10`} 
+                                                placeholder="I will meditate..." 
+                                            />
+                                            <button 
+                                                type="button"
+                                                onClick={handleAtomize}
+                                                disabled={!habitTitle || isAtomizing}
+                                                className={`absolute right-2 top-1/2 -translate-y-1/2 p-1.5 rounded-lg ${themeClasses.secondary} ${themeClasses.text} hover:opacity-80 transition-all disabled:opacity-30`}
+                                            >
+                                                {isAtomizing ? <Loader2 size={14} className="animate-spin" /> : <Sparkles size={14} />}
+                                            </button>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <Clock className="text-slate-200 shrink-0" size={16} />
+                                        <input 
+                                            value={habitDuration}
+                                            onChange={e => setHabitDuration(e.target.value)}
+                                            placeholder="Duration (e.g. 5m, 1h)"
+                                            className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 text-sm font-bold border-none outline-none focus:ring-2 focus:ring-indigo-500/10 dark:text-white"
+                                        />
+                                    </div>
+                                </div>
+
+                                <div className="space-y-3 pt-2">
+                                    <label className="text-[9px] font-black uppercase text-slate-400 block tracking-widest ml-1">Connect to Strategy</label>
+                                    <select 
+                                        value={linkedGoalId}
+                                        onChange={e => setLinkedGoalId(e.target.value)}
+                                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-4 text-xs font-bold dark:text-white outline-none"
+                                    >
+                                        <option value="">(Optional) No linked goal</option>
+                                        {goals.filter(g => !g.completed).map(g => (
+                                            <option key={g.id} value={g.id}>{g.title}</option>
+                                        ))}
+                                    </select>
+                                    
+                                    <div className="flex gap-2 overflow-x-auto no-scrollbar pt-2">
+                                        {(['Morning', 'Afternoon', 'Evening', 'Anytime'] as const).map(time => (
+                                            <button
+                                                key={time}
+                                                type="button"
+                                                onClick={() => setHabitTime(time)}
+                                                className={`flex-1 py-2 px-3 rounded-xl text-[8px] font-black uppercase tracking-widest border transition-all whitespace-nowrap ${habitTime === time ? `${themeClasses.primary} text-white border-transparent shadow-md` : 'bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-400'}`}
+                                            >
+                                                {time}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="space-y-3 pt-4">
+                                <button 
+                                    type="submit" 
+                                    disabled={!habitTitle.trim()}
+                                    className={`w-full bg-gradient-to-br ${themeClasses.gradient} text-white py-5 rounded-3xl font-black text-[10px] uppercase tracking-widest shadow-2xl transition-all active:scale-95 disabled:opacity-50`}
+                                >
+                                    {editingHabitId ? 'Update Ritual' : 'Deploy Ritual'}
+                                </button>
+                                
+                                {editingHabitId && (
+                                    <button 
+                                        type="button"
+                                        onClick={handleDeleteHabit}
+                                        className="w-full py-4 text-[10px] font-black uppercase tracking-widest text-rose-400 hover:text-rose-500 flex items-center justify-center gap-2 transition-all"
+                                    >
+                                        <Trash2 size={14} /> Delete Ritual
+                                    </button>
+                                )}
+                            </div>
+                        </form>
+                    </div>
+                </div>
+            )}
         </div>
-      </div>
-
-      {/* FLOATING ACTION BUTTON (FAB) */}
-      <div className="fixed bottom-24 left-1/2 -translate-x-1/2 w-full max-w-lg pointer-events-none z-30 px-6">
-          <div className="relative h-full w-full">
-              <button 
-                  onClick={handleOpenCreate} 
-                  className={`absolute right-0 w-14 h-14 rounded-full ${themeClasses.primary} text-white shadow-lg flex items-center justify-center hover:scale-110 active:scale-95 transition-all pointer-events-auto ring-4 ring-white/10 dark:ring-slate-900/40 animate-in fade-in zoom-in slide-in-from-bottom-4 duration-500 delay-300`}
-                  aria-label={t('new_habit')}
-              >
-                  <Plus size={28} strokeWidth={3.5} />
-              </button>
-          </div>
-      </div>
-
-      {showModal && (
-          <div className="fixed inset-0 z-[100] bg-slate-900/40 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-300">
-              <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[3rem] p-10 shadow-xl relative border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-300 max-h-[90vh] overflow-y-auto no-scrollbar">
-                  <div className="absolute top-6 right-6 flex items-center gap-2">
-                      {editingHabitId && (
-                          <button 
-                            type="button"
-                            onClick={handleDeleteHabit} 
-                            className="text-slate-300 hover:text-red-500 p-2 bg-slate-50 dark:bg-slate-800 rounded-full shadow-sm transition-colors"
-                          >
-                              <Trash2 size={16}/>
-                          </button>
-                      )}
-                      <button onClick={() => { setShowModal(false); setShowGoalSelector(false); setShowTimeSelector(false); }} className="text-slate-300 hover:text-slate-500 p-2 bg-slate-50 dark:bg-slate-800 rounded-full shadow-sm transition-colors"><X size={18}/></button>
-                  </div>
-                  
-                  <form onSubmit={handleSaveHabit} className="space-y-6">
-                      <div className="flex items-center gap-4">
-                          <div className="flex-1 min-w-0">
-                              <h3 className="text-xl font-bold text-slate-800 dark:text-slate-50 tracking-tight leading-tight truncate">{editingHabitId ? t('edit_habit') : t('new_habit')}</h3>
-                              <p className="text-[10px] text-slate-400 font-bold uppercase tracking-widest mt-1.5">{t('design_routine')}</p>
-                          </div>
-                      </div>
-
-                      <div className="space-y-5">
-                          <div className="space-y-2">
-                              <label className="text-[9px] font-bold text-slate-400 dark:text-slate-50 uppercase tracking-widest ml-1">{t('link_goal')}</label>
-                              <div className="relative">
-                                  <button 
-                                    type="button" 
-                                    onClick={() => { setShowGoalSelector(!showGoalSelector); setShowTimeSelector(false); }} 
-                                    className={`w-full bg-slate-50 dark:bg-slate-800 border rounded-xl px-4 py-3 text-sm font-bold flex justify-between items-center shadow-sm transition-all ${showGoalSelector ? `ring-2 ${themeClasses.ring} border-transparent` : 'border-slate-100 dark:border-slate-800'}`}
-                                  >
-                                      <span className="truncate">{linkedGoalId ? (goals.find(g => g.id === linkedGoalId)?.title) : t('no_goal_linked')}</span>
-                                      <ChevronDown size={14} className={`text-slate-400 shrink-0 transition-transform ${showGoalSelector ? 'rotate-180' : ''}`} />
-                                  </button>
-                                  {showGoalSelector && (
-                                      <div className="absolute top-full left-0 mt-2 min-w-full w-max max-w-[240px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-[2rem] shadow-2xl border border-slate-100 dark:border-slate-800 z-[150] p-1.5 animate-in fade-in zoom-in-95 origin-top">
-                                          <div className="max-h-56 overflow-y-auto no-scrollbar space-y-1">
-                                              <SelectorItem 
-                                                label={t('no_goal_linked')} 
-                                                isSelected={!linkedGoalId} 
-                                                onClick={() => { setLinkedGoalId(''); setShowGoalSelector(false); }} 
-                                              />
-                                              {/* Logic: Only show goals that are NOT completed for habit linking */}
-                                              {goals.filter(g => !g.completed).map(g => (
-                                                  <SelectorItem 
-                                                    key={g.id} 
-                                                    label={g.title} 
-                                                    icon={Target}
-                                                    isSelected={linkedGoalId === g.id} 
-                                                    onClick={() => { setLinkedGoalId(g.id); setShowGoalSelector(false); }} 
-                                                  />
-                                              ))}
-                                          </div>
-                                      </div>
-                                  )}
-                              </div>
-                          </div>
-
-                          <div className="space-y-2">
-                              <label className="text-[9px] font-bold text-slate-400 dark:text-slate-50 uppercase tracking-widest ml-1">{t('habit_name')}</label>
-                              <input type="text" required value={habitTitle} onChange={(e) => setHabitTitle(e.target.value)} className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-xl px-4 py-3 text-sm font-bold text-slate-800 dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/10 transition-all shadow-sm" placeholder={t('habit_name_ph')} />
-                          </div>
-
-                          <div className="grid grid-cols-2 gap-4">
-                              <div className="space-y-2">
-                                  <label className="text-[9px] font-bold text-slate-400 dark:text-slate-50 uppercase tracking-widest ml-1">{t('time_of_day')}</label>
-                                  <div className="relative">
-                                      <button 
-                                        type="button" 
-                                        onClick={() => { setShowTimeSelector(!showTimeSelector); setShowGoalSelector(false); }} 
-                                        className={`w-full bg-slate-50 dark:bg-slate-800 border rounded-xl px-4 py-3 text-sm font-bold flex justify-between items-center shadow-sm transition-all ${showTimeSelector ? `ring-2 ${themeClasses.ring} border-transparent` : 'border-slate-100 dark:border-slate-800'}`}
-                                      >
-                                          <div className="flex items-center gap-2 min-w-0">
-                                            {React.createElement(TIME_CONSTRAINTS[habitTime].icon, { size: 14, className: themeClasses.text })}
-                                            <span className="truncate">{t(habitTime.toLowerCase())}</span>
-                                          </div>
-                                          <ChevronDown size={14} className={`text-slate-400 shrink-0 transition-transform ${showTimeSelector ? 'rotate-180' : ''}`} />
-                                      </button>
-                                      {showTimeSelector && (
-                                          <div className="absolute top-full left-0 mt-2 min-w-full w-max max-w-[240px] bg-white/95 dark:bg-slate-900/95 backdrop-blur-xl rounded-[2rem] shadow-2xl border border-slate-100 dark:border-slate-800 z-[150] p-1.5 animate-in fade-in zoom-in-95 origin-top">
-                                              <div className="space-y-1">
-                                                  {routineOptions.map((opt) => (
-                                                      <SelectorItem 
-                                                        key={opt.key}
-                                                        label={opt.label}
-                                                        icon={opt.icon}
-                                                        isSelected={habitTime === opt.key}
-                                                        onClick={() => { setHabitTime(opt.key as any); setShowTimeSelector(false); }}
-                                                      />
-                                                  ))}
-                                              </div>
-                                          </div>
-                                      )}
-                                  </div>
-                              </div>
-                              <div className="space-y-2">
-                                  <label className="text-[9px] font-bold text-slate-400 dark:text-slate-50 uppercase tracking-widest ml-1">{t('reminder')}</label>
-                                  <input 
-                                    type="time" 
-                                    value={reminderTime} 
-                                    onChange={e => setReminderTime(e.target.value)} 
-                                    className={`w-full bg-slate-50 dark:bg-slate-800 border rounded-xl px-4 py-3 text-sm font-bold text-slate-800 dark:text-white outline-none shadow-sm transition-all ${!isTimeValid ? 'border-rose-500 ring-2 ring-rose-500/10' : 'border-slate-100 dark:border-slate-800 focus:ring-2 focus:ring-indigo-500/10'}`} 
-                                  />
-                                  <p className={`text-[8px] font-black uppercase mt-1 px-1 flex items-center gap-1 ${!isTimeValid ? 'text-rose-500 animate-pulse' : 'text-slate-400'}`}>
-                                    <AlertCircle size={10}/> {TIME_CONSTRAINTS[habitTime].label}
-                                  </p>
-                              </div>
-                          </div>
-                      </div>
-
-                      <div className="flex gap-4 pt-4">
-                          <button type="button" onClick={() => setShowModal(false)} className="flex-1 py-4 rounded-2xl font-bold text-[10px] uppercase tracking-wider bg-slate-50 dark:bg-slate-800 text-slate-500 border border-slate-100 dark:border-slate-800 shadow-sm transition-all active:scale-95">{t('back')}</button>
-                          <button type="submit" disabled={!habitTitle.trim() || !isTimeValid} className={`flex-[2] py-4 rounded-2xl font-bold text-[10px] uppercase tracking-wider text-white bg-gradient-to-br ${themeClasses.gradient} shadow-lg active:scale-95 transition-all disabled:opacity-30 disabled:grayscale`}>{editingHabitId ? t('update_habit') : t('create_habit')}</button>
-                      </div>
-                  </form>
-              </div>
-          </div>
-      )}
-    </div>
-  );
+    );
 };

@@ -1,3 +1,4 @@
+
 export enum GoalCategory {
   Health = 'Health',
   Career = 'Career',
@@ -19,18 +20,18 @@ export interface Goal {
   title: string;
   description?: string;
   category: GoalCategory;
-  progress: number; // 0 to 100
+  progress: number; 
   deadline?: string;
   completed: boolean;
   milestones: Milestone[];
-  notes?: string;
-  coverImage?: string; 
 }
 
 export interface Habit {
   id: string;
   title: string;
+  trigger?: string; 
   description?: string;
+  duration?: string;
   timeOfDay: 'Morning' | 'Afternoon' | 'Evening' | 'Anytime';
   reminderTime?: string; 
   linkedGoalId?: string; 
@@ -45,68 +46,62 @@ export interface JournalEntry {
   prompt: string;
   mood: 'Great' | 'Good' | 'Neutral' | 'Bad' | 'Awful';
   activities: string[];
-  attachments: string[]; 
-  audio?: string; 
   aiInsight?: string;
   linkedGoalId?: string; 
+  linkedHabitId?: string;
+  imageData?: string; // Base64 image data
 }
 
 export type ThemeColor = 'indigo' | 'emerald' | 'rose' | 'amber' | 'blue';
 export type AppLanguage = 'English' | 'French' | 'German' | 'Ukrainian' | 'Spanish';
 
-export interface JournalTemplate {
-  id: string;
-  title: string;
-  content: string; 
+export interface DailyBriefing {
+  motivation: string;
+  focus: string;
+  tip: string;
+  journalPrompt: string;
+  priorityTask?: string; 
 }
 
-export type ServiceName = 'Fitbit' | 'AppleHealth' | 'GoogleCalendar' | 'Todoist' | 'Spotify' | 'YouTube' | 'Twitter';
-
-export type NotificationType = 'reminder' | 'achievement' | 'motivation' | 'system';
+export type ServiceName = 'Gemini' | 'Lumina-Core' | 'NodeJS';
 
 export interface AppNotification {
-    id: string;
-    title: string;
-    message: string;
-    type: NotificationType;
-    timestamp: number;
-    actionLabel?: string;
-    onAction?: () => void;
+  id: string;
+  type: 'achievement' | 'motivation' | 'reminder';
+  title: string;
+  message: string;
 }
 
-export interface NotificationSettings {
-    enabled: boolean;
-    vacationMode: boolean;
-    smartReminders: boolean;
-    sound: boolean;
-    channels: {
-        push: boolean;
-        inApp: boolean;
-        email: boolean;
-    };
-    types: {
-        habits: boolean;
-        goals: boolean;
-        journal: boolean;
-        motivation: boolean;
-    };
-    snoozeDuration: number;
+export interface Post {
+  id: string;
+  author: string;
+  avatar: string;
+  category: string;
+  title: string;
+  content: string;
+  likes: number;
+  likedBy: string[];
+  comments: Comment[];
+  timestamp: string;
+  type: 'discussion' | 'question' | 'share';
 }
 
-export interface SecuritySettings {
-    pinCode: string | null; 
-    incognitoMode: boolean;
-    biometricEnabled: boolean; 
+export interface Comment {
+  id: string;
+  author: string;
+  avatar: string;
+  content: string;
+  timestamp: string;
+  isExpert?: boolean;
 }
 
 export interface Resource {
   id: string;
   title: string;
   author: string;
-  type: 'article' | 'video' | 'podcast' | 'book';
   category: string;
-  url: string; 
   image: string;
+  type: 'video' | 'podcast' | 'article';
   duration: string;
   rating: number;
 }
@@ -115,59 +110,28 @@ export interface LearningModule {
   id: string;
   title: string;
   description: string;
-  totalLessons: number;
-  completedLessons: number;
   image: string;
-  tags: string[];
+  completedLessons: number;
+  totalLessons: number;
 }
 
 export interface Quiz {
   id: string;
   title: string;
   description: string;
-  questionsCount: number;
   image: string;
+  questionsCount: number;
 }
 
-export interface Comment {
-    id: string;
-    author: string;
-    avatar: string;
-    content: string;
-    timestamp: string;
-    isExpert?: boolean;
-}
-
-export interface Post {
-    id: string;
-    author: string;
-    avatar: string;
-    category: string;
-    title: string;
-    content: string;
-    likes: number;
-    likedBy: string[]; 
-    comments: Comment[];
-    timestamp: string;
-    type: 'question' | 'share' | 'discussion';
-}
-
-export interface CommunityEvent {
-    id: string;
-    title: string;
-    date: string; 
-    description: string;
-    participants: number;
-    joined: boolean;
-    image: string;
-    type: 'challenge' | 'workshop' | 'meetup';
-}
-
-export interface DailyBriefing {
-  motivation: string;
-  focus: string;
-  tip: string;
-  journalPrompt: string;
+export interface AppEvent {
+  id: string;
+  title: string;
+  description: string;
+  image: string;
+  date: string;
+  participants: number;
+  type: string;
+  joined: boolean;
 }
 
 export interface UserState {
@@ -179,32 +143,30 @@ export interface UserState {
   theme: 'light' | 'dark';
   themeColor: ThemeColor;
   language: AppLanguage; 
-  reflectionTime?: string; 
-  customPrompts: string[];
-  savedTemplates: JournalTemplate[];
-  lastExportTimestamp?: number;
-  appVersion?: string;
+  dailyBriefing?: DailyBriefing;
+  lastBriefingUpdate?: number;
+  securitySettings: {
+    pinCode: string | null;
+    incognitoMode?: boolean;
+  };
   dashboardLayout: {
-    showMetrics: boolean;
-    showAfternoon: boolean;
-    showEvening: boolean;
     showGrow: boolean;
     showCommunity: boolean;
   };
-  integrations: Record<ServiceName, boolean>;
-  healthData: {
-      steps: number;
-      sleepHours: number;
-      waterIntake: number; 
+  notificationSettings: {
+    enabled: boolean;
+    types: {
+      habits: boolean;
+      goals: boolean;
+      journal: boolean;
+      motivation: boolean;
+    };
   };
-  notificationSettings: NotificationSettings;
-  securitySettings: SecuritySettings;
-  savedResourceIds: string[];
+  notifications: AppNotification[];
   posts: Post[];
-  events: CommunityEvent[];
-  // AI Personalized briefing fields
-  dailyBriefing?: DailyBriefing;
-  lastBriefingUpdate?: number;
-  lastBriefingLanguage?: AppLanguage;
-  lastRewardClaimDate: string | null;
+  events: AppEvent[];
+  resources: Resource[];
+  modules: LearningModule[];
+  quizzes: Quiz[];
+  savedResourceIds: string[];
 }
