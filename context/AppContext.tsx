@@ -15,6 +15,7 @@ export const THEMES: Record<ThemeColor, any> = {
   blue: { name: 'accent_blue', primary: 'bg-blue-600', text: 'text-blue-600', secondary: 'bg-blue-50 dark:bg-blue-900/20', gradient: 'from-blue-600 to-indigo-600', ring: 'ring-blue-500', border: 'border-blue-100 dark:border-blue-900/30' }
 };
 
+// Added missing German, Ukrainian, and Spanish translations to satisfy AppLanguage type requirement
 export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
   English: {
     home: 'Home',
@@ -57,6 +58,8 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     storage_label: 'LocalStorage active',
     choose_avatar: 'Choose Avatar',
     growth_traveler: 'Growth Traveler',
+    import_success: 'Data integrated successfully.',
+    import_failed: 'Import failed. Check file format.',
   },
   French: { 
     home: 'Accueil', 
@@ -99,10 +102,141 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     storage_label: 'Stockage local actif',
     choose_avatar: 'Choisir un avatar',
     growth_traveler: 'Voyageur de croissance',
+    import_success: 'Données intégrées avec succès.',
+    import_failed: 'Échec de l\'importation.',
   },
-  German: { home: 'Start', goals: 'Ziele', journal: 'Journal', insights: 'Einblicke' },
-  Ukrainian: { home: 'Головна', goals: 'Цілі', journal: 'Журнал', insights: 'Інсайти' },
-  Spanish: { home: 'Inicio', goals: 'Metas', journal: 'Diario', insights: 'Perspectivas' }
+  German: {
+    home: 'Startseite',
+    goals: 'Ziele',
+    journal: 'Journal',
+    insights: 'Einblicke',
+    profile: 'Profil',
+    good_morning: 'Guten Morgen',
+    good_afternoon: 'Guten Tag',
+    good_evening: 'Guten Abend',
+    daily_wisdom: 'Tägliche Weisheit',
+    habit_rate: 'Gewohnheitserfolg',
+    routine_desc: 'Dein täglicher Schwung',
+    momentum_desc: 'Aktive Wachstumswege',
+    keystone: 'Schlüsselaufgabe',
+    identity: 'Identität',
+    upload_photo: 'Foto hochladen',
+    edit: 'Bearbeiten',
+    settings: 'Einstellungen',
+    language: 'Sprache',
+    dark_mode: 'Dunkelmodus',
+    accent_palette: 'Akzentpalette',
+    ai_connection: 'KI-Verbindung',
+    api_test: 'KI testen',
+    notifications_hub: 'Benachrichtigungen',
+    enable_push: 'Benachrichtigungen aktivieren',
+    security: 'Sicherheit',
+    app_lock: 'App-Sperre',
+    set_pin: 'PIN festlegen',
+    disable: 'Deaktivieren',
+    export_data: 'Exportieren',
+    import_data: 'Importieren',
+    delete_account: 'Daten löschen',
+    accent_indigo: 'Indigo',
+    accent_emerald: 'Smaragd',
+    accent_rose: 'Rose',
+    accent_amber: 'Bernstein',
+    accent_blue: 'Blau',
+    persistence_on: 'Cloud-Persistenz',
+    storage_label: 'LocalStorage aktiv',
+    choose_avatar: 'Avatar wählen',
+    growth_traveler: 'Wachstumsreisender',
+    import_success: 'Daten erfolgreich integriert.',
+    import_failed: 'Import fehlgeschlagen.',
+  },
+  Ukrainian: {
+    home: 'Головна',
+    goals: 'Цілі',
+    journal: 'Журнал',
+    insights: 'Аналітика',
+    profile: 'Профіль',
+    good_morning: 'Доброго ранку',
+    good_afternoon: 'Доброго дня',
+    good_evening: 'Доброго вечора',
+    daily_wisdom: 'Щоденна мудрість',
+    habit_rate: 'Успіх звичок',
+    routine_desc: 'Ваш щоденний імпульс',
+    momentum_desc: 'Активні шляхи зростання',
+    keystone: 'Ключове завдання',
+    identity: 'Ідентичність',
+    upload_photo: 'Завантажити фото',
+    edit: 'Редагувати',
+    settings: 'Налаштування',
+    language: 'Мова',
+    dark_mode: 'Темний режим',
+    accent_palette: 'Палітра кольорів',
+    ai_connection: 'Підключення ШІ',
+    api_test: 'Тестувати ШІ',
+    notifications_hub: 'Сповіщення',
+    enable_push: 'Увімкнути сповіщення',
+    security: 'Безпека',
+    app_lock: 'Блокування програми',
+    set_pin: 'Встановити PIN',
+    disable: 'Вимкнути',
+    export_data: 'Експорт',
+    import_data: 'Імпорт',
+    delete_account: 'Видалити дані',
+    accent_indigo: 'Індиго',
+    accent_emerald: 'Смарагдовий',
+    accent_rose: 'Рожевий',
+    accent_amber: 'Бурштиновий',
+    accent_blue: 'Синій',
+    persistence_on: 'Хмарне збереження',
+    storage_label: 'LocalStorage активний',
+    choose_avatar: 'Обрати аватар',
+    growth_traveler: 'Мандрівник зростання',
+    import_success: 'Дані успішно інтегровані.',
+    import_failed: 'Помилка імпорту.',
+  },
+  Spanish: {
+    home: 'Inicio',
+    goals: 'Metas',
+    journal: 'Diario',
+    insights: 'Perspectivas',
+    profile: 'Perfil',
+    good_morning: 'Buenos días',
+    good_afternoon: 'Buenas tardes',
+    good_evening: 'Buenas noches',
+    daily_wisdom: 'Sabiduría diaria',
+    habit_rate: 'Éxito de hábitos',
+    routine_desc: 'Tu impulso diario',
+    momentum_desc: 'Caminos de crecimiento',
+    keystone: 'Tarea clave',
+    identity: 'Identidad',
+    upload_photo: 'Subir foto',
+    edit: 'Editar',
+    settings: 'Ajustes',
+    language: 'Idioma',
+    dark_mode: 'Modo oscuro',
+    accent_palette: 'Paleta de acentos',
+    ai_connection: 'Conexión IA',
+    api_test: 'Probar IA',
+    notifications_hub: 'Notificaciones',
+    enable_push: 'Activar notificaciones',
+    security: 'Seguridad',
+    app_lock: 'Bloqueo de app',
+    set_pin: 'Establecer PIN',
+    disable: 'Desactivar',
+    export_data: 'Exportar',
+    import_data: 'Importar',
+    delete_account: 'Borrar datos',
+    accent_indigo: 'Índigo',
+    accent_emerald: 'Esmeralda',
+    accent_rose: 'Rosa',
+    accent_amber: 'Ámbar',
+    accent_blue: 'Azul',
+    persistence_on: 'Persistencia en la nube',
+    storage_label: 'LocalStorage activo',
+    choose_avatar: 'Elegir avatar',
+    growth_traveler: 'Viajero del crecimiento',
+    import_success: 'Datos integrados correctamente.',
+    import_failed: 'Error al importar.',
+  }
 };
 
 interface AppContextType extends UserState {
@@ -246,6 +380,23 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setState(prev => ({ ...prev, ...prefs }));
   };
 
+  const triggerNotification = useCallback((title: string, message: string, type: any) => {
+    const id = Date.now().toString();
+    setState(prev => ({ ...prev, notifications: [{ id, title, message, type }, ...prev.notifications] }));
+  }, []);
+
+  const dismissNotification = (id: string) => {
+    setState(prev => ({ ...prev, notifications: prev.notifications.filter(n => n.id !== id) }));
+  };
+
+  const snoozeNotification = (id: string) => {
+    dismissNotification(id);
+    setTimeout(() => {
+      const n = state.notifications.find(notif => notif.id === id);
+      if (n) triggerNotification(n.title, `Snoozed: ${n.message}`, n.type);
+    }, 300000);
+  };
+
   const addGoal = (goal: Goal) => {
     triggerHaptic('success');
     setState(prev => ({ ...prev, goals: [goal, ...prev.goals] }));
@@ -323,25 +474,8 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setState(prev => ({ ...prev, securitySettings: { ...prev.securitySettings, pinCode: pin } }));
   };
 
-  const triggerNotification = (title: string, message: string, type: any) => {
-    const id = Date.now().toString();
-    setState(prev => ({ ...prev, notifications: [{ id, title, message, type }, ...prev.notifications] }));
-  };
-
-  const dismissNotification = (id: string) => {
-    setState(prev => ({ ...prev, notifications: prev.notifications.filter(n => n.id !== id) }));
-  };
-
-  const snoozeNotification = (id: string) => {
-    dismissNotification(id);
-    setTimeout(() => {
-      const n = state.notifications.find(notif => notif.id === id);
-      if (n) triggerNotification(n.title, `Snoozed: ${n.message}`, n.type);
-    }, 300000);
-  };
-
   const exportData = () => {
-    const blob = new Blob([JSON.stringify(state)], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(state, null, 2)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -351,21 +485,43 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const importData = (json: string) => {
     try {
-      const parsed = JSON.parse(json);
-      // Safe Merge Logic: Combine imported data with default state to prevent missing keys
+      // Clean input: remove common markdown headers or leading/trailing text if user pasted from chat
+      let cleaned = json.trim();
+      if (cleaned.includes('--- START OF FILE')) {
+          cleaned = cleaned.split('\n').slice(1).join('\n');
+      }
+      if (cleaned.includes('```')) {
+          cleaned = cleaned.replace(/```json|```/g, '').trim();
+      }
+
+      const parsed = JSON.parse(cleaned);
+      if (!parsed || typeof parsed !== 'object') throw new Error("Invalid structure");
+
+      // Robust Merge Logic
       const mergedState: UserState = {
         ...DEFAULT_STATE,
         ...parsed,
         securitySettings: { ...DEFAULT_STATE.securitySettings, ...(parsed.securitySettings || {}) },
         notificationSettings: { ...DEFAULT_STATE.notificationSettings, ...(parsed.notificationSettings || {}) }
       };
+
+      // Reset stale or future-dated briefings to prevent logic lock
+      if (mergedState.lastBriefingUpdate && mergedState.lastBriefingUpdate > Date.now()) {
+          mergedState.lastBriefingUpdate = undefined;
+          mergedState.dailyBriefing = undefined;
+      }
+
       setState(mergedState);
+      
+      // Force sync dependent UI states
+      setIsLocked(!!mergedState.securitySettings.pinCode);
+      
       triggerHaptic('success');
-      alert('Data imported successfully!');
+      triggerNotification(t('import_data'), t('import_success'), 'achievement');
     } catch (err) {
       console.error('Import failed', err);
       triggerHaptic('error');
-      alert('Failed to import data. The file might be corrupted.');
+      triggerNotification(t('import_data'), t('import_failed'), 'reminder');
     }
   };
 

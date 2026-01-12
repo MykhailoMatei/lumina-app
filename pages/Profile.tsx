@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp, THEMES, APP_VERSION } from '../context/AppContext';
 import { ThemeColor, AppLanguage } from '../types';
@@ -237,7 +238,7 @@ export const Profile: React.FC = () => {
                 </div>
 
                 <div className="space-y-3 pt-2">
-                    <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest ml-1">{t('choose_avatar')}</p>
+                    <p className="text-[8px] font-bold text-slate-400 dark:text-slate-50 uppercase tracking-widest ml-1">{t('choose_avatar')}</p>
                     <div className="flex flex-wrap gap-2.5">
                         {AVATARS.map(av => (
                             <button 
@@ -428,7 +429,7 @@ export const Profile: React.FC = () => {
                         <div className="p-2 rounded-xl bg-slate-50 dark:bg-slate-800 group-hover:scale-110 transition-transform shrink-0"><FileUp size={15} /></div>
                         <span className="text-[8px] font-bold uppercase tracking-widest truncate">{t('import_data')}</span>
                     </button>
-                    <input type="file" ref={importInputRef} onChange={handleImportData} accept=".json" className="hidden" />
+                    <input type="file" ref={importInputRef} onChange={handleImportData} accept=".json,application/json" className="hidden" />
                 </div>
 
                 <button onClick={() => { if(confirm(t('delete_account_confirm'))) deleteAccount(); }} className="w-full py-5 text-rose-500 font-bold text-[9px] uppercase tracking-[0.2em] bg-rose-50/40 dark:bg-rose-950/10 rounded-2xl flex items-center justify-center gap-3 border border-rose-100 dark:border-rose-900/20 hover:bg-rose-50 transition-colors shadow-sm">
