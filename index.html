@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="en" class="h-full">
   <head>
@@ -32,39 +33,49 @@
               slate: { 950: '#020617' },
             },
             animation: {
-              'pop-haptic': 'pop-haptic 0.15s cubic-bezier(0.175, 0.885, 0.32, 1) forwards',
+              'pop-haptic': 'pop-haptic 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards',
               'check-draw': 'check-draw 0.3s cubic-bezier(0.65, 0, 0.35, 1) forwards',
               'sparkle': 'sparkle 2s ease-in-out infinite',
               'float': 'float 3s ease-in-out infinite',
               'reward-pulse': 'reward-pulse 2s infinite',
               'pulse-slow': 'pulse-slow 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+              'slide-up': 'slide-up 0.4s cubic-bezier(0.16, 1, 0.3, 1)',
+              'shimmer': 'shimmer 2s linear infinite',
             },
             keyframes: {
               'pop-haptic': {
                 '0%': { transform: 'scale(1)' },
-                '50%': { transform: 'scale(0.96)' },
+                '40%': { transform: 'scale(0.92)' },
                 '100%': { transform: 'scale(1)' },
               },
               'check-draw': {
-                '0%': { transform: 'scale(0.8) translateY(1px)', opacity: '0' },
-                '100%': { transform: 'scale(1) translateY(0)', opacity: '1' },
+                '0%': { transform: 'scale(0.5) rotate(-10deg)', opacity: '0' },
+                '100%': { transform: 'scale(1) rotate(0)', opacity: '1' },
               },
               'sparkle': {
                 '0%, 100%': { opacity: 1, transform: 'scale(1)' },
-                '50%': { opacity: 0.8, transform: 'scale(1.1)' },
+                '50%': { opacity: 0.6, transform: 'scale(1.15)' },
               },
               'float': {
                 '0%, 100%': { transform: 'translateY(0)' },
-                '50%': { transform: 'translateY(-10px)' },
+                '50%': { transform: 'translateY(-8px)' },
               },
               'reward-pulse': {
-                '0%': { boxShadow: '0 0 15px rgba(99, 102, 241, 0.2)' },
-                '50%': { boxShadow: '0 0 35px rgba(99, 102, 241, 0.5)' },
-                '100%': { boxShadow: '0 0 15px rgba(99, 102, 241, 0.2)' },
+                '0%': { boxShadow: '0 0 10px rgba(99, 102, 241, 0.2)' },
+                '50%': { boxShadow: '0 0 40px rgba(99, 102, 241, 0.4)' },
+                '100%': { boxShadow: '0 0 10px rgba(99, 102, 241, 0.2)' },
               },
               'pulse-slow': {
-                '0%, 100%': { opacity: 0.15 },
-                '50%': { opacity: 0.4 },
+                '0%, 100%': { opacity: 0.2 },
+                '50%': { opacity: 0.5 },
+              },
+              'slide-up': {
+                '0%': { transform: 'translateY(20px)', opacity: '0' },
+                '100%': { transform: 'translateY(0)', opacity: '1' },
+              },
+              'shimmer': {
+                'from': { backgroundPosition: '200% 0' },
+                'to': { backgroundPosition: '-200% 0' }
               }
             }
           },
@@ -78,6 +89,7 @@
         -webkit-tap-highlight-color: transparent;
         font-family: 'Inter', sans-serif;
         transition: background-color 0.4s ease;
+        overflow: hidden; /* Ensure body itself never scrolls */
       }
       html.dark body {
         background-color: #020617;
@@ -88,6 +100,20 @@
       .pb-safe { padding-bottom: env(safe-area-inset-bottom); }
       .pt-safe-content { padding-top: calc(env(safe-area-inset-top) + 1rem); }
       
+      .haptic-btn:active {
+        transform: scale(0.96);
+      }
+
+      .glass-card {
+        background: rgba(255, 255, 255, 0.7);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+      }
+
+      .dark .glass-card {
+        background: rgba(15, 23, 42, 0.7);
+      }
+
       * {
         transition-property: background-color, border-color, color, opacity, transform;
         transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
@@ -109,8 +135,8 @@
 }
 </script>
 </head>
-  <body class="h-full">
-    <div id="root" class="h-full"></div>
+  <body class="h-full w-full fixed inset-0 selection:bg-indigo-100">
+    <div id="root" class="h-full w-full"></div>
     <script type="module" src="/index.tsx"></script>
   </body>
 </html>

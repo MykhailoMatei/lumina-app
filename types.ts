@@ -9,6 +9,8 @@ export enum GoalCategory {
   Creativity = 'Creativity'
 }
 
+export type GoalOutcome = 'Integrated' | 'Evolved' | 'Paused with Insight' | 'Completed' | 'Redirected';
+
 export interface Milestone {
   id: string;
   title: string;
@@ -18,12 +20,20 @@ export interface Milestone {
 export interface Goal {
   id: string;
   title: string;
-  description?: string;
+  whyStatement?: string;
   category: GoalCategory;
   progress: number; 
   deadline?: string;
   completed: boolean;
   milestones: Milestone[];
+  isPaused?: boolean;
+  // Hall of Progress / Journey Fields
+  outcomeLabel?: GoalOutcome;
+  identityImpact?: string;
+  whatStayed?: string;
+  whatShifted?: string;
+  archivedAt?: string;
+  startDate?: string;
 }
 
 export interface Habit {

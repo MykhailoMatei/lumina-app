@@ -1,11 +1,11 @@
 
-import React, { createContext, useContext, useState, useEffect, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback } from 'react';
 import { 
   UserState, Goal, Habit, JournalEntry, ThemeColor, AppLanguage, 
   DailyBriefing, GoalCategory, Post, Comment, Resource, AppNotification 
 } from '../types';
 
-export const APP_VERSION = '1.0.0-core';
+export const APP_VERSION = '1.1.0-tactile';
 
 export const THEMES: Record<ThemeColor, any> = {
   indigo: { name: 'accent_indigo', primary: 'bg-indigo-600', text: 'text-indigo-600', secondary: 'bg-indigo-50 dark:bg-indigo-900/20', gradient: 'from-indigo-600 to-blue-600', ring: 'ring-indigo-500', border: 'border-indigo-100 dark:border-indigo-900/30' },
@@ -17,171 +17,293 @@ export const THEMES: Record<ThemeColor, any> = {
 
 export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
   English: {
-    home: 'Today', goals: 'Goal Momentum', journal: 'Reflect', insights: 'Growth', profile: 'Profile',
-    keystone: 'Top Priority', daily_wisdom: 'Daily Spark', my_goals: 'Core Goals',
-    new_goal: 'New Goal', edit: 'Edit', back: 'Back', save: 'Save', delete_key: 'Delete',
-    active: 'Active', completed: 'Archive', morning: 'Morning', afternoon: 'Afternoon', evening: 'Evening',
-    streak: 'Streak', habit_rate: 'Routine Power', write_entry: 'New Reflection', search: 'Search memories...',
-    good_morning: 'Rise & Shine', good_afternoon: 'Keep Moving', good_evening: 'Wind Down',
-    privacy_policy: 'Privacy', settings: 'Settings', dark_mode: 'Night Theme', language: 'Language',
-    identity: 'Identity', choose_avatar: 'Avatar', accent_palette: 'Accent', ai_breakdown: 'AI Strategy',
-    security: 'Security', export_data: 'Export', import_data: 'Import', delete_account: 'Wipe Data',
-    growth_traveler: 'Growth Traveler', choose_category: 'Category', adjust_photo: 'Adjust Photo',
-    upload_photo: 'Upload Photo', focus_mode: 'Focus Mode', show_grow: 'Inspiration Hub', show_community: 'Community Access',
-    ai_connection: 'AI Brain', api_test: 'Test Link', notifications_hub: 'Notifications', enable_push: 'Push Alerts',
-    habits_notif: 'Habits', goals_notif: 'Goals', journal_notif: 'Reflections', motivation_notif: 'Wisdom',
-    persistence_on: 'Cloud Save', storage_label: 'Database Status', app_lock: 'Security PIN', app_lock_desc: 'Protect your data',
-    disable: 'Disable', set_pin: 'Set PIN', delete_account_confirm: 'Are you sure? This action is permanent.',
-    accent_indigo: 'Indigo', accent_emerald: 'Emerald', accent_rose: 'Rose', accent_amber: 'Amber', accent_blue: 'Blue',
-    routine_desc: 'Strength of your daily execution.', momentum_desc: 'Active strategies driving your vision.'
+    home: 'Home',
+    goals: 'Goals',
+    journal: 'Journal',
+    insights: 'Insights',
+    profile: 'Profile',
+    good_morning: 'Good Morning',
+    good_afternoon: 'Good Afternoon',
+    good_evening: 'Good Evening',
+    daily_wisdom: 'Daily Wisdom',
+    habit_rate: 'Habit Success',
+    routine_desc: 'Your daily momentum',
+    momentum_desc: 'Active growth paths',
+    keystone: 'Keystone Task',
+    identity: 'Identity',
+    upload_photo: 'Upload Photo',
+    edit: 'Edit',
+    settings: 'Settings',
+    language: 'Language',
+    dark_mode: 'Dark Mode',
+    accent_palette: 'Accent Palette',
+    ai_connection: 'AI Connection',
+    api_test: 'Test AI',
+    notifications_hub: 'Notifications',
+    enable_push: 'Enable Notifications',
+    security: 'Security',
+    app_lock: 'App Lock',
+    set_pin: 'Set PIN',
+    disable: 'Disable',
+    export_data: 'Export',
+    import_data: 'Import',
+    delete_account: 'Delete Data',
+    accent_indigo: 'Indigo',
+    accent_emerald: 'Emerald',
+    accent_rose: 'Rose',
+    accent_amber: 'Amber',
+    accent_blue: 'Blue',
+    persistence_on: 'Cloud persistence',
+    storage_label: 'LocalStorage active',
   },
-  Ukrainian: {
-    home: 'Сьогодні', goals: 'Імпульс цілей', journal: 'Роздуми', insights: 'Прогрес', profile: 'Профіль',
-    keystone: 'Пріоритет', daily_wisdom: 'Мудрість', my_goals: 'Цілі',
-    new_goal: 'Нова ціль', edit: 'Редагувати', back: 'Назад', save: 'Зберегти', delete_key: 'Видалити',
-    active: 'Активні', completed: 'Архів', morning: 'Ранок', afternoon: 'День', evening: 'Вечір',
-    streak: 'Серія', habit_rate: 'Сила рутини', write_entry: 'Новий запис', search: 'Пошук...',
-    good_morning: 'Доброго ранку', good_afternoon: 'Добрий день', good_evening: 'Добрий вечір',
-    routine_desc: 'Сила виконання щоденних справ.', momentum_desc: 'Активні стратегії вашого розвитку.'
-  },
-  Spanish: { home: 'Hoy', goals: 'Impulso', journal: 'Reflejo', insights: 'Progreso', profile: 'Perfil', keystone: 'Prioridad', daily_wisdom: 'Sabiduría', my_goals: 'Objetivos', new_goal: 'Nuevo', edit: 'Editar', back: 'Atrás', save: 'Guardar', habit_rate: 'Poder de Rutina' },
-  French: { home: 'Aujourd\'hui', goals: 'Momentum', journal: 'Reflet', insights: 'Progrès', profile: 'Profil', keystone: 'Priorité', daily_wisdom: 'Sagesse', my_goals: 'Buts', new_goal: 'Nouveau', edit: 'Modifier', back: 'Retour', save: 'Sauver', habit_rate: 'Force de Routine' },
-  German: { home: 'Heute', goals: 'Momentum', journal: 'Reflexion', insights: 'Fortschritt', profile: 'Profile', keystone: 'Priorität', daily_wisdom: 'Weisheit', my_goals: 'Ziele', new_goal: 'Neu', edit: 'Bearbeiten', back: 'Zurück', save: 'Speichern', habit_rate: 'Routine Kraft' }
+  French: { home: 'Accueil', goals: 'Objectifs', journal: 'Journal', insights: 'Analyses' },
+  German: { home: 'Start', goals: 'Ziele', journal: 'Journal', insights: 'Einblicke' },
+  Ukrainian: { home: 'Головна', goals: 'Цілі', journal: 'Журнал', insights: 'Інсайти' },
+  Spanish: { home: 'Inicio', goals: 'Metas', journal: 'Diario', insights: 'Perspectivas' }
 };
 
-const DEFAULT_USER_STATE: UserState = {
-  name: 'Lumina Traveler', avatar: '🌱', goals: [], habits: [], journalEntries: [],
-  theme: 'light', themeColor: 'indigo', language: 'English',
+interface AppContextType extends UserState {
+  t: (key: string) => string;
+  themeClasses: any;
+  circadian: { state: string, label: string, headerGradient: string, appBg: string, glowColor: string, buttonStyle: string, iconContrast: boolean };
+  isLocked: boolean;
+  isPersistent: boolean;
+  preselectedGoalId: string | null;
+  setPreselectedGoalId: (id: string | null) => void;
+  updateUserPreferences: (prefs: Partial<UserState>) => void;
+  addGoal: (goal: Goal) => void;
+  updateGoal: (id: string, goal: Partial<Goal>) => void;
+  deleteGoal: (id: string) => void;
+  addHabit: (habit: Habit) => void;
+  updateHabit: (id: string, habit: Partial<Habit>) => void;
+  deleteHabit: (id: string) => void;
+  toggleHabitCompletion: (id: string, date: string) => void;
+  addJournalEntry: (entry: JournalEntry) => void;
+  updateJournalEntry: (id: string, entry: Partial<JournalEntry>) => void;
+  deleteJournalEntry: (id: string) => void;
+  unlockApp: (pin: string) => boolean;
+  setPinCode: (pin: string | null) => void;
+  triggerNotification: (title: string, message: string, type: any) => void;
+  dismissNotification: (id: string) => void;
+  snoozeNotification: (id: string) => void;
+  exportData: () => void;
+  importData: (json: string) => void;
+  deleteAccount: () => void;
+  requestPersistence: () => Promise<boolean>;
+  // Fix: Added missing method declarations for Community and Inspiration pages
+  addPost: (post: Post) => void;
+  likePost: (id: string) => void;
+  addComment: (postId: string, comment: Comment) => void;
+  toggleEventJoin: (id: string) => void;
+  toggleResourceFavorite: (id: string) => void;
+}
+
+const AppContext = createContext<AppContextType | undefined>(undefined);
+
+const STORAGE_KEY = 'lumina_v1_state';
+
+const DEFAULT_STATE: UserState = {
+  name: 'Seeker',
+  avatar: '🌱',
+  goals: [],
+  habits: [],
+  journalEntries: [],
+  theme: 'light',
+  themeColor: 'indigo',
+  language: 'English',
   securitySettings: { pinCode: null },
   dashboardLayout: { showGrow: true, showCommunity: true },
-  notificationSettings: { enabled: true, types: { habits: true, goals: true, journal: true, motivation: true } },
-  posts: [], events: [], resources: [], modules: [], quizzes: [],
-  savedResourceIds: [], notifications: []
+  notificationSettings: {
+    enabled: true,
+    types: { habits: true, goals: true, journal: true, motivation: true }
+  },
+  notifications: [],
+  posts: [],
+  events: [],
+  resources: [],
+  modules: [],
+  quizzes: [],
+  savedResourceIds: []
 };
 
-const AppContext = createContext<any>(null);
-
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [user, setUser] = useState<UserState>(() => {
-    const saved = localStorage.getItem('lumina_v3_core');
-    if (!saved) return DEFAULT_USER_STATE;
-    const parsed = JSON.parse(saved);
-    return {
-      ...DEFAULT_USER_STATE, ...parsed,
-      goals: (parsed.goals || []).map((g: any) => ({ ...g, milestones: g.milestones || [] })),
-      habits: (parsed.habits || []).map((h: any) => ({ ...h, completedDates: h.completedDates || [] })),
-      journalEntries: parsed.journalEntries || [],
-      dashboardLayout: parsed.dashboardLayout || DEFAULT_USER_STATE.dashboardLayout,
-      notificationSettings: parsed.notificationSettings || DEFAULT_USER_STATE.notificationSettings,
-      posts: parsed.posts || [],
-      events: parsed.events || [],
-      resources: parsed.resources || [],
-      modules: parsed.modules || [],
-      quizzes: parsed.quizzes || [],
-      savedResourceIds: parsed.savedResourceIds || [],
-      notifications: parsed.notifications || []
-    };
+  const [state, setState] = useState<UserState>(() => {
+    const saved = localStorage.getItem(STORAGE_KEY);
+    return saved ? JSON.parse(saved) : DEFAULT_STATE;
   });
 
-  const [isLocked, setIsLocked] = useState(!!user.securitySettings.pinCode);
+  const [isLocked, setIsLocked] = useState(!!state.securitySettings.pinCode);
   const [isPersistent, setIsPersistent] = useState(false);
+  const [preselectedGoalId, setPreselectedGoalId] = useState<string | null>(null);
 
   useEffect(() => {
-    localStorage.setItem('lumina_v3_core', JSON.stringify(user));
-    document.documentElement.classList.toggle('dark', user.theme === 'dark');
-  }, [user]);
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+    if (state.theme === 'dark') document.documentElement.classList.add('dark');
+    else document.documentElement.classList.remove('dark');
+  }, [state]);
 
-  useEffect(() => {
-      if (navigator.storage && navigator.storage.persisted) {
-          navigator.storage.persisted().then(setIsPersistent);
-      }
+  const t = useCallback((key: string) => {
+    return TRANSLATIONS[state.language]?.[key] || TRANSLATIONS['English'][key] || key;
+  }, [state.language]);
+
+  const themeClasses = useMemo(() => THEMES[state.themeColor] || THEMES.indigo, [state.themeColor]);
+
+  const circadian = useMemo(() => {
+    const hour = new Date().getHours();
+    
+    // MORNING - Vibrant Energy
+    if (hour >= 5 && hour < 12) return { 
+        state: 'Morning', 
+        label: 'Awakening Phase', 
+        headerGradient: 'from-amber-400/90 to-orange-500/90', 
+        glowColor: 'rgba(245,158,11,0.2)', 
+        appBg: 'bg-[#fcfcfd] dark:bg-slate-950',
+        buttonStyle: 'bg-white shadow-xl text-slate-900',
+        iconContrast: true
+    };
+    
+    // DAY - Maximum Focus
+    if (hour >= 12 && hour < 17) return { 
+        state: 'Day', 
+        label: 'Performance Phase', 
+        headerGradient: 'from-blue-400/90 to-indigo-600/90', 
+        glowColor: 'rgba(59,130,246,0.2)', 
+        appBg: 'bg-white dark:bg-slate-900',
+        buttonStyle: 'bg-white shadow-xl text-slate-900',
+        iconContrast: true
+    };
+    
+    // EVENING - Midnight Velvet (Softer on eyes than pure black)
+    if (hour >= 17 && hour < 21) return { 
+        state: 'Evening', 
+        label: 'Reflection Phase', 
+        headerGradient: 'from-[#1e1b4b] via-[#0f172a] to-[#0a0f1e]', 
+        glowColor: 'rgba(79,70,229,0.2)', 
+        appBg: 'bg-[#0a0f1e] dark:bg-[#0a0f1e]',
+        buttonStyle: 'bg-white/10 backdrop-blur-2xl border border-white/10 text-white shadow-none',
+        iconContrast: false
+    };
+    
+    // NIGHT - Restoration (Deep Navy)
+    return { 
+        state: 'Night', 
+        label: 'Restoration Phase', 
+        headerGradient: 'from-[#030712] via-[#020617] to-[#000000]', 
+        glowColor: 'rgba(30,41,59,0.2)', 
+        appBg: 'bg-[#030712] dark:bg-[#030712]',
+        buttonStyle: 'bg-white/5 backdrop-blur-3xl border border-white/5 text-white/70 shadow-none',
+        iconContrast: false
+    };
   }, []);
 
-  const t = (key: string) => TRANSLATIONS[user.language]?.[key] || TRANSLATIONS.English[key] || key;
-  const themeClasses = THEMES[user.themeColor];
-
-  const updateUserPreferences = (prefs: Partial<UserState>) => setUser(prev => ({ ...prev, ...prefs }));
-  
-  const addGoal = (goal: Goal) => setUser(prev => ({ ...prev, goals: [...prev.goals, goal] }));
-  const updateGoal = (id: string, updates: Partial<Goal>) => setUser(prev => ({ ...prev, goals: prev.goals.map(g => g.id === id ? { ...g, ...updates } : g) }));
-  const deleteGoal = (id: string) => setUser(prev => ({ ...prev, goals: prev.goals.filter(g => g.id !== id) }));
-  
-  const addHabit = (habit: Habit) => setUser(prev => ({ ...prev, habits: [...prev.habits, habit] }));
-  const updateHabit = (id: string, updates: Partial<Habit>) => setUser(prev => ({ ...prev, habits: prev.habits.map(h => h.id === id ? { ...h, ...updates } : h) }));
-  const deleteHabit = (id: string) => setUser(prev => ({ ...prev, habits: prev.habits.filter(h => h.id !== id) }));
-  
-  const toggleHabitCompletion = (id: string, date: string) => setUser(prev => ({
-    ...prev,
-    habits: prev.habits.map(h => {
-      if (h.id === id) {
-          const isDone = h.completedDates.includes(date);
-          return {
-              ...h,
-              completedDates: isDone ? h.completedDates.filter(d => d !== date) : [...h.completedDates, date],
-              streak: isDone ? Math.max(0, h.streak - 1) : h.streak + 1
-          };
-      }
-      return h;
-    })
-  }));
-
-  const addJournalEntry = (entry: JournalEntry) => setUser(prev => ({ ...prev, journalEntries: [entry, ...prev.journalEntries] }));
-  const deleteJournalEntry = (id: string) => setUser(prev => ({ ...prev, journalEntries: prev.journalEntries.filter(e => e.id !== id) }));
-
-  const addPost = (post: Post) => setUser(prev => ({ ...prev, posts: [post, ...prev.posts] }));
-  const likePost = (id: string) => setUser(prev => ({
-    ...prev,
-    posts: prev.posts.map(p => p.id === id ? { 
-        ...p, 
-        likes: p.likedBy.includes('me') ? p.likes - 1 : p.likes + 1,
-        likedBy: p.likedBy.includes('me') ? p.likedBy.filter(u => u !== 'me') : [...p.likedBy, 'me']
-    } : p)
-  }));
-  const addComment = (postId: string, comment: Comment) => setUser(prev => ({
-    ...prev,
-    posts: prev.posts.map(p => p.id === postId ? { ...p, comments: [...p.comments, comment] } : p)
-  }));
-  const toggleEventJoin = (id: string) => setUser(prev => ({
-    ...prev,
-    events: prev.events.map(e => e.id === id ? { ...e, joined: !e.joined, participants: e.joined ? e.participants - 1 : e.participants + 1 } : e)
-  }));
-
-  const toggleResourceFavorite = (id: string) => setUser(prev => ({
-    ...prev,
-    savedResourceIds: prev.savedResourceIds.includes(id) ? prev.savedResourceIds.filter(rid => rid !== id) : [...prev.savedResourceIds, id]
-  }));
-
-  const triggerNotification = (title: string, message: string, type: AppNotification['type']) => {
-      const n: AppNotification = { id: Date.now().toString(), title, message, type };
-      setUser(prev => ({ ...prev, notifications: [...prev.notifications, n] }));
-  };
-  const dismissNotification = (id: string) => setUser(prev => ({ ...prev, notifications: prev.notifications.filter(n => n.id !== id) }));
-  const snoozeNotification = (id: string) => { dismissNotification(id); };
-
-  const requestPersistence = async () => {
-    if (navigator.storage && navigator.storage.persist) {
-        const persisted = await navigator.storage.persist();
-        setIsPersistent(persisted);
-        return persisted;
+  const triggerHaptic = (type: 'success' | 'error' | 'medium') => {
+    if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
+      if (type === 'success') window.navigator.vibrate([10, 30, 10]);
+      else if (type === 'error') window.navigator.vibrate([50, 100, 50]);
+      else window.navigator.vibrate(15);
     }
-    return false;
+  };
+
+  const updateUserPreferences = (prefs: Partial<UserState>) => {
+    setState(prev => ({ ...prev, ...prefs }));
+  };
+
+  const addGoal = (goal: Goal) => {
+    triggerHaptic('success');
+    setState(prev => ({ ...prev, goals: [goal, ...prev.goals] }));
+  };
+
+  const updateGoal = (id: string, updates: Partial<Goal>) => {
+    setState(prev => ({
+      ...prev,
+      goals: prev.goals.map(g => g.id === id ? { ...g, ...updates } : g)
+    }));
+  };
+
+  const deleteGoal = (id: string) => {
+    setState(prev => ({ ...prev, goals: prev.goals.filter(g => g.id !== id) }));
+  };
+
+  const addHabit = (habit: Habit) => {
+    triggerHaptic('success');
+    setState(prev => ({ ...prev, habits: [habit, ...prev.habits] }));
+  };
+
+  const updateHabit = (id: string, updates: Partial<Habit>) => {
+    setState(prev => ({
+      ...prev,
+      habits: prev.habits.map(h => h.id === id ? { ...h, ...updates } : h)
+    }));
+  };
+
+  const deleteHabit = (id: string) => {
+    setState(prev => ({ ...prev, habits: prev.habits.filter(h => h.id !== id) }));
+  };
+
+  const toggleHabitCompletion = (id: string, date: string) => {
+    triggerHaptic('medium');
+    setState(prev => ({
+      ...prev,
+      habits: prev.habits.map(h => {
+        if (h.id === id) {
+          const completed = h.completedDates.includes(date);
+          const newDates = completed ? h.completedDates.filter(d => d !== date) : [...h.completedDates, date];
+          return { ...h, completedDates: newDates, streak: completed ? Math.max(0, h.streak - 1) : h.streak + 1 };
+        }
+        return h;
+      })
+    }));
+  };
+
+  const addJournalEntry = (entry: JournalEntry) => {
+    triggerHaptic('success');
+    setState(prev => ({ ...prev, journalEntries: [entry, ...prev.journalEntries] }));
+  };
+
+  const updateJournalEntry = (id: string, updates: Partial<JournalEntry>) => {
+    setState(prev => ({
+      ...prev,
+      journalEntries: prev.journalEntries.map(e => e.id === id ? { ...e, ...updates } : e)
+    }));
+  };
+
+  const deleteJournalEntry = (id: string) => {
+    setState(prev => ({ ...prev, journalEntries: prev.journalEntries.filter(e => e.id !== id) }));
   };
 
   const unlockApp = (pin: string) => {
-      if (user.securitySettings.pinCode === pin) {
-          setIsLocked(false);
-          return true;
-      }
-      return false;
+    if (pin === state.securitySettings.pinCode) {
+      setIsLocked(false);
+      triggerHaptic('success');
+      return true;
+    }
+    triggerHaptic('error');
+    return false;
   };
 
   const setPinCode = (pin: string | null) => {
-      updateUserPreferences({ securitySettings: { pinCode: pin } });
+    setState(prev => ({ ...prev, securitySettings: { ...prev.securitySettings, pinCode: pin } }));
+  };
+
+  const triggerNotification = (title: string, message: string, type: any) => {
+    const id = Date.now().toString();
+    setState(prev => ({ ...prev, notifications: [{ id, title, message, type }, ...prev.notifications] }));
+  };
+
+  const dismissNotification = (id: string) => {
+    setState(prev => ({ ...prev, notifications: prev.notifications.filter(n => n.id !== id) }));
+  };
+
+  const snoozeNotification = (id: string) => {
+    dismissNotification(id);
+    setTimeout(() => {
+      const n = state.notifications.find(notif => notif.id === id);
+      if (n) triggerNotification(n.title, `Snoozed: ${n.message}`, n.type);
+    }, 300000);
   };
 
   const exportData = () => {
-    const data = JSON.stringify(user, null, 2);
-    const blob = new Blob([data], { type: 'application/json' });
+    const blob = new Blob([JSON.stringify(state)], { type: 'application/json' });
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
@@ -189,34 +311,96 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     a.click();
   };
 
-  const importData = (content: string) => {
-      try {
-          const parsed = JSON.parse(content);
-          setUser({ ...DEFAULT_USER_STATE, ...parsed });
-          alert('Data imported successfully!');
-      } catch (e) {
-          alert('Import failed.');
-      }
+  const importData = (json: string) => {
+    try {
+      const parsed = JSON.parse(json);
+      setState(parsed);
+      triggerHaptic('success');
+    } catch {
+      triggerHaptic('error');
+    }
   };
 
   const deleteAccount = () => {
-      localStorage.removeItem('lumina_v3_core');
-      window.location.reload();
+    localStorage.removeItem(STORAGE_KEY);
+    setState(DEFAULT_STATE);
+    window.location.reload();
+  };
+
+  const requestPersistence = async () => {
+    if (navigator.storage && navigator.storage.persist) {
+      const persistent = await navigator.storage.persist();
+      setIsPersistent(persistent);
+      return persistent;
+    }
+    return false;
+  };
+
+  // Fix: Implemented missing community and inspiration related methods in AppProvider
+  const addPost = (post: Post) => {
+    triggerHaptic('success');
+    setState(prev => ({ ...prev, posts: [post, ...prev.posts] }));
+  };
+
+  const likePost = (id: string) => {
+    triggerHaptic('medium');
+    setState(prev => ({
+      ...prev,
+      posts: prev.posts.map(p => {
+        if (p.id === id) {
+          const isLiked = p.likedBy.includes('me');
+          const newLikedBy = isLiked ? p.likedBy.filter(u => u !== 'me') : [...p.likedBy, 'me'];
+          return { ...p, likes: isLiked ? Math.max(0, p.likes - 1) : p.likes + 1, likedBy: newLikedBy };
+        }
+        return p;
+      })
+    }));
+  };
+
+  const addComment = (postId: string, comment: Comment) => {
+    triggerHaptic('success');
+    setState(prev => ({
+      ...prev,
+      posts: prev.posts.map(p => p.id === postId ? { ...p, comments: [...p.comments, comment] } : p)
+    }));
+  };
+
+  const toggleEventJoin = (id: string) => {
+    triggerHaptic('medium');
+    setState(prev => ({
+      ...prev,
+      events: prev.events.map(e => e.id === id ? { ...e, joined: !e.joined } : e)
+    }));
+  };
+
+  const toggleResourceFavorite = (id: string) => {
+    triggerHaptic('medium');
+    setState(prev => {
+      const isSaved = prev.savedResourceIds.includes(id);
+      const newSaved = isSaved ? prev.savedResourceIds.filter(rid => rid !== id) : [...prev.savedResourceIds, id];
+      return { ...prev, savedResourceIds: newSaved };
+    });
   };
 
   return (
-    <AppContext.Provider value={{ 
-        ...user, isLocked, isPersistent, unlockApp, setPinCode, exportData, importData, deleteAccount,
-        t, themeClasses, updateUserPreferences, requestPersistence,
-        addGoal, updateGoal, deleteGoal, 
-        addHabit, updateHabit, deleteHabit, toggleHabitCompletion, 
-        addJournalEntry, deleteJournalEntry,
-        addPost, likePost, addComment, toggleEventJoin,
-        toggleResourceFavorite, triggerNotification, dismissNotification, snoozeNotification
+    <AppContext.Provider value={{
+      ...state,
+      t, themeClasses, circadian, isLocked, isPersistent,
+      preselectedGoalId, setPreselectedGoalId,
+      updateUserPreferences, addGoal, updateGoal, deleteGoal,
+      addHabit, updateHabit, deleteHabit, toggleHabitCompletion,
+      addJournalEntry, updateJournalEntry, deleteJournalEntry,
+      unlockApp, setPinCode, triggerNotification, dismissNotification, snoozeNotification,
+      exportData, importData, deleteAccount, requestPersistence,
+      addPost, likePost, addComment, toggleEventJoin, toggleResourceFavorite
     }}>
       {children}
     </AppContext.Provider>
   );
 };
 
-export const useApp = () => useContext(AppContext);
+export const useApp = () => {
+  const context = useContext(AppContext);
+  if (!context) throw new Error('useApp must be used within an AppProvider');
+  return context;
+};

@@ -2,24 +2,28 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
-    Check, Flame, Sun, Moon, Clock, Sparkles, Trophy, 
-    ChevronDown, ChevronUp, Zap, Star, Plus, X, Link, ArrowRight, Loader2, Coffee, Sunset, Target, Play, Pencil, Trash2
+    Check, Sun, Moon, Clock, Sparkles, Trophy, 
+    ChevronDown, ChevronUp, Zap, Star, Plus, X, ArrowRight, Loader2, Coffee, Sunset, Target, Play, Pencil, Trash2, RefreshCw, Flame
 } from 'lucide-react';
 import { generateDailyBriefing, suggestAtomicHabit } from '../services/geminiService';
 import { Habit } from '../types';
 
-export const Dashboard: React.FC<{ setView: (v: string) => void }> = ({ setView }) => {
+interface DashboardProps {
+    setView: (view: string) => void;
+}
+
+export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
     const { 
         name, avatar, goals, habits, journalEntries, toggleHabitCompletion, addHabit, updateHabit, deleteHabit,
         themeClasses, language, t, dailyBriefing, lastBriefingUpdate, 
-        updateUserPreferences 
+        updateUserPreferences, circadian 
     } = useApp();
     
     const [isBriefingExpanded, setIsBriefingExpanded] = useState(false);
     const [showHabitModal, setShowHabitModal] = useState(false);
     const [editingHabitId, setEditingHabitId] = useState<string | null>(null);
+    const [isRefreshing, setIsRefreshing] = useState(false);
 
-    // Habit Navigator State
     const currentHour = new Date().getHours();
     const initialTab = useMemo(() => {
         if (currentHour >= 5 && currentHour < 12) return 'Morning';
@@ -40,41 +44,50 @@ export const Dashboard: React.FC<{ setView: (v: string) => void }> = ({ setView 
 
     const today = new Date().toISOString().split('T')[0];
 
-    // Execution Logic: Find the single most important next step
     const nextAction = useMemo(() => {
         const pendingHabits = habits.filter(h => !h.completedDates.includes(today));
         if (pendingHabits.length === 0) return null;
-        
-        // Priority 1: Match current time tab
         const currentPhaseHabits = pendingHabits.filter(h => h.timeOfDay === initialTab);
         if (currentPhaseHabits.length > 0) return currentPhaseHabits[0];
-        
-        // Priority 2: "Anytime" habits
         const anytimeHabits = pendingHabits.filter(h => h.timeOfDay === 'Anytime');
         if (anytimeHabits.length > 0) return anytimeHabits[0];
-
         return pendingHabits[0];
     }, [habits, today, initialTab]);
 
-    const circadian = useMemo(() => {
-        if (currentHour >= 5 && currentHour < 11) return { state: 'Morning', gradient: 'from-amber-200 to-indigo-500', icon: <Sun className="animate-pulse" /> };
-        if (currentHour >= 11 && currentHour < 17) return { state: 'Day', gradient: 'from-blue-400 to-indigo-600', icon: <Clock /> };
-        if (currentHour >= 17 && currentHour < 21) return { state: 'Evening', gradient: 'from-orange-400 to-rose-600', icon: <Moon /> };
-        return { state: 'Night', gradient: 'from-slate-800 to-indigo-950', icon: <Moon /> };
-    }, [currentHour]);
+    const phaseIcon = useMemo(() => {
+        switch(circadian.state) {
+            case 'Morning': return <Sun className="animate-pulse" size={24} />;
+            case 'Day': return <Clock size={24} />;
+            case 'Evening': return <Sunset size={24} />;
+            default: return <Moon size={24} />;
+        }
+    }, [circadian.state]);
+
+    const fetchBriefing = async (force = false) => {
+        setIsRefreshing(true);
+        try {
+            const briefing = await generateDailyBriefing(name, goals, habits, journalEntries, language);
+            updateUserPreferences({ dailyBriefing: briefing, lastBriefingUpdate: Date.now() });
+        } catch (error) {
+            console.error("Failed to fetch daily briefing", error);
+        } finally {
+            setIsRefreshing(false);
+        }
+    };
 
     useEffect(() => {
-        const fetchBriefing = async () => {
-            const now = Date.now();
-            const fiveAM = new Date(); fiveAM.setHours(5,0,0,0);
-            if (new Date() < fiveAM) fiveAM.setDate(fiveAM.getDate() - 1);
-            
-            if (!dailyBriefing || (lastBriefingUpdate || 0) < fiveAM.getTime()) {
-                const briefing = await generateDailyBriefing(name, goals, habits, journalEntries, language);
-                updateUserPreferences({ dailyBriefing: briefing, lastBriefingUpdate: now });
+        const checkBriefingStaleness = () => {
+            const now = new Date();
+            const lastUpdate = lastBriefingUpdate ? new Date(lastBriefingUpdate) : null;
+            const isNewDay = !lastUpdate || lastUpdate.toDateString() !== now.toDateString();
+            const fiveAMToday = new Date();
+            fiveAMToday.setHours(5, 0, 0, 0);
+            const isPostFiveAM = now >= fiveAMToday && (!lastUpdate || lastUpdate < fiveAMToday);
+            if (isNewDay || isPostFiveAM) {
+                fetchBriefing();
             }
         };
-        fetchBriefing();
+        checkBriefingStaleness();
     }, [language, goals.length, habits.length]);
 
     const handleAtomize = async () => {
@@ -129,7 +142,6 @@ export const Dashboard: React.FC<{ setView: (v: string) => void }> = ({ setView 
                 completedDates: []
             });
         }
-
         resetHabitForm();
     };
 
@@ -151,14 +163,14 @@ export const Dashboard: React.FC<{ setView: (v: string) => void }> = ({ setView 
 
     return (
         <div className="pb-32 space-y-6 animate-in fade-in duration-700">
-            {/* MOMENTUM HUB HEADER */}
-            <div className={`-mx-6 -mt-6 p-8 pt-16 rounded-b-[3.5rem] bg-gradient-to-br ${circadian.gradient} shadow-2xl relative transition-all duration-1000`}>
-                <div className="absolute top-4 right-6 opacity-30">{circadian.icon}</div>
+            {/* MOMENTUM HUB HEADER - High-End Adaptive Lighting Design */}
+            <div className={`-mx-6 -mt-6 p-8 pt-16 rounded-b-[3.5rem] bg-gradient-to-br ${circadian.headerGradient} relative transition-all duration-1000 shadow-xl overflow-hidden`}>
+                <div className="absolute -top-10 -right-10 w-40 h-40 bg-white/5 rounded-full blur-3xl" />
+                <div className="absolute top-4 right-6 opacity-20 text-white">{phaseIcon}</div>
                 
-                {/* REFINED PROFILE BUTTON SIZE */}
                 <button 
                     onClick={() => setView('profile')} 
-                    className="absolute top-14 right-6 w-12 h-12 rounded-2xl bg-white/20 backdrop-blur-md border border-white/30 flex items-center justify-center text-2xl shadow-lg hover:scale-105 active:scale-95 transition-all overflow-hidden z-20 group"
+                    className="absolute top-14 right-6 w-12 h-12 rounded-2xl bg-white/10 backdrop-blur-md border border-white/20 flex items-center justify-center text-2xl shadow-lg hover:scale-105 active:scale-95 transition-all overflow-hidden z-20 group"
                     aria-label="Profile"
                 >
                     <div className="w-full h-full flex items-center justify-center transition-transform group-active:scale-95">
@@ -167,53 +179,63 @@ export const Dashboard: React.FC<{ setView: (v: string) => void }> = ({ setView 
                 </button>
 
                 <div className="space-y-4 relative z-10">
-                    <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-60 text-white">Day Perspective</p>
+                    <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-50 text-white">{circadian.label}</p>
                     <h1 className="text-3xl font-black text-white tracking-tighter pr-16">
                         {currentHour < 12 ? t('good_morning') : currentHour < 18 ? t('good_afternoon') : t('good_evening')}, {name.split(' ')[0]}
                     </h1>
 
-                    {/* THE "NEXT MOVE" CTA: High Visibility Action Step */}
+                    {/* SMART DYNAMIC ROUTINE CTA */}
                     {nextAction ? (
                         <button 
                             onClick={() => toggleHabitCompletion(nextAction.id, today)}
-                            className="w-full bg-white text-slate-900 rounded-[2rem] p-4 flex items-center justify-between shadow-2xl active:scale-[0.97] transition-all group overflow-hidden"
+                            className={`w-full ${circadian.buttonStyle} rounded-[2rem] p-4 flex items-center justify-between active:scale-[0.97] transition-all group overflow-hidden border border-white/10`}
                         >
                             <div className="flex items-center gap-3">
-                                <div className={`${themeClasses.primary} p-2 rounded-xl text-white group-hover:scale-110 transition-transform`}>
+                                <div className={`p-2 rounded-xl group-hover:scale-110 transition-transform ${circadian.iconContrast ? themeClasses.secondary + ' ' + themeClasses.text : 'bg-white/10 text-white'}`}>
                                     <Play size={16} fill="currentColor" />
                                 </div>
                                 <div className="text-left">
-                                    <p className="text-[8px] font-black uppercase text-slate-400 tracking-[0.15em]">Next Move</p>
+                                    <p className="text-[8px] font-black uppercase tracking-[0.15em] opacity-40">START ROUTINE</p>
                                     <h4 className="text-sm font-black truncate max-w-[180px]">
                                         {nextAction.title} <span className="opacity-40 ml-1 text-[10px]">({nextAction.duration || '5m'})</span>
                                     </h4>
                                 </div>
                             </div>
-                            <ArrowRight size={18} className="text-slate-300 group-hover:translate-x-1 transition-transform" />
+                            <ArrowRight size={18} className="opacity-40 group-hover:translate-x-1 transition-transform" />
                         </button>
                     ) : (
-                        <div className="w-full bg-white/10 backdrop-blur-md rounded-[2rem] p-4 flex items-center justify-center text-white/80 border border-white/10">
+                        <div className="w-full bg-white/5 backdrop-blur-md rounded-[2rem] p-4 flex items-center justify-center text-white/50 border border-white/5">
                             <Check className="mr-2" size={16} strokeWidth={3} />
                             <span className="text-xs font-black uppercase tracking-widest">Rituals Complete</span>
                         </div>
                     )}
                     
                     {dailyBriefing && (
-                        <div onClick={() => setIsBriefingExpanded(!isBriefingExpanded)} className="bg-white/10 backdrop-blur-xl border border-white/10 rounded-[2rem] p-5 cursor-pointer hover:bg-white/15 transition-all">
-                            <div className="flex justify-between items-center opacity-80 mb-2">
-                                <span className="text-[9px] font-black uppercase tracking-widest text-white flex items-center gap-2"><Sparkles size={12} /> {t('daily_wisdom')}</span>
-                                {isBriefingExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                        <div onClick={() => setIsBriefingExpanded(!isBriefingExpanded)} className="bg-black/20 backdrop-blur-xl border border-white/5 rounded-[2.5rem] p-5 cursor-pointer hover:bg-black/30 transition-all group/briefing shadow-inner">
+                            <div className="flex justify-between items-center opacity-60 mb-2">
+                                <span className="text-[9px] font-black uppercase tracking-widest text-white flex items-center gap-2">
+                                    <Sparkles size={12} className={isRefreshing ? 'animate-spin' : ''} /> {t('daily_wisdom')}
+                                </span>
+                                <div className="flex items-center gap-3 text-white">
+                                    <button 
+                                        onClick={(e) => { e.stopPropagation(); fetchBriefing(true); }}
+                                        className="p-1 hover:bg-white/20 rounded-full transition-colors"
+                                    >
+                                        <RefreshCw size={12} className={isRefreshing ? 'animate-spin' : ''} />
+                                    </button>
+                                    {isBriefingExpanded ? <ChevronUp size={14} /> : <ChevronDown size={14} />}
+                                </div>
                             </div>
-                            <p className={`text-white font-bold text-sm italic leading-snug ${isBriefingExpanded ? '' : 'line-clamp-1'}`}>"{dailyBriefing.motivation}"</p>
+                            <p className={`text-white/90 font-bold text-sm italic leading-snug ${isBriefingExpanded ? '' : 'line-clamp-1'}`}>"{dailyBriefing.motivation}"</p>
                             {isBriefingExpanded && (
                                 <div className="grid grid-cols-2 gap-3 mt-4 animate-in zoom-in-95">
-                                    <div className="bg-black/10 rounded-2xl p-3 border border-white/5">
-                                        <h3 className="text-[8px] font-black uppercase opacity-60 text-white mb-1">Focus</h3>
-                                        <p className="text-xs font-bold text-white">{dailyBriefing.focus}</p>
+                                    <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
+                                        <h3 className="text-[8px] font-black uppercase opacity-40 text-white mb-1">Focus</h3>
+                                        <p className="text-xs font-bold text-white/90">{dailyBriefing.focus}</p>
                                     </div>
-                                    <div className="bg-black/10 rounded-2xl p-3 border border-white/5">
-                                        <h3 className="text-[8px] font-black uppercase opacity-60 text-white mb-1">Action</h3>
-                                        <p className="text-xs font-bold text-white">{dailyBriefing.tip}</p>
+                                    <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
+                                        <h3 className="text-[8px] font-black uppercase opacity-40 text-white mb-1">Action</h3>
+                                        <p className="text-xs font-bold text-white/90">{dailyBriefing.tip}</p>
                                     </div>
                                 </div>
                             )}
@@ -224,12 +246,15 @@ export const Dashboard: React.FC<{ setView: (v: string) => void }> = ({ setView 
 
             {/* KEYSTONE TASK */}
             {dailyBriefing?.priorityTask && (
-                <div className={`bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] border-2 ${themeClasses.border} shadow-lg animate-in slide-in-from-bottom-4 duration-500`}>
-                    <div className="flex items-center gap-3 mb-3">
-                        <div className={`w-8 h-8 rounded-full ${themeClasses.primary} flex items-center justify-center text-white shadow-lg`}><Zap size={16} /></div>
-                        <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t('keystone')}</h2>
+                <div className={`bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] border-2 ${themeClasses.border} animate-in slide-in-from-bottom-4 duration-500 group/keystone relative overflow-hidden shadow-sm`}>
+                    {isRefreshing && <div className="absolute inset-0 bg-white/50 dark:bg-slate-900/50 backdrop-blur-sm z-10 flex items-center justify-center"><Loader2 className="animate-spin text-slate-400" /></div>}
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-3">
+                            <div className={`w-8 h-8 rounded-full ${themeClasses.primary} flex items-center justify-center text-white shadow-lg`}><Zap size={16} /></div>
+                            <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t('keystone')}</h2>
+                        </div>
+                        <span className="text-[8px] font-bold text-slate-300 uppercase">{new Date().toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}</span>
                     </div>
-                    {/* Balanced text size and weight */}
                     <p className="text-[15px] font-bold text-slate-700 dark:text-slate-200 leading-snug mb-4">{dailyBriefing.priorityTask}</p>
                     <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                         <div className={`h-full ${themeClasses.primary} transition-all duration-1000`} style={{ width: `${progress}%` }} />
@@ -258,7 +283,7 @@ export const Dashboard: React.FC<{ setView: (v: string) => void }> = ({ setView 
                                 onClick={() => setActiveHabitTab(time)}
                                 className={`flex flex-col min-w-[95px] p-4 rounded-[1.75rem] border-2 transition-all relative ${
                                     isActive 
-                                    ? `${themeClasses.secondary} ${themeClasses.border} shadow-indigo-100/50 dark:shadow-none shadow-lg` 
+                                    ? `${themeClasses.secondary} ${themeClasses.border}` 
                                     : 'bg-white dark:bg-slate-900 border-slate-50 dark:border-slate-800/50 opacity-60'
                                 }`}
                             >
@@ -280,10 +305,10 @@ export const Dashboard: React.FC<{ setView: (v: string) => void }> = ({ setView 
                 
                 <div className="space-y-3 min-h-[150px]">
                     {filteredHabits.length === 0 ? (
-                        <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-3 border-2 border-dashed border-slate-100 dark:border-slate-800 rounded-[2.5rem]">
-                            <Plus size={24} className="opacity-20" />
-                            <p className="text-[10px] font-black uppercase tracking-widest opacity-40">No {activeHabitTab} Rituals</p>
-                            <button onClick={() => { setEditingHabitId(null); setHabitTime(activeHabitTab); setShowHabitModal(true); }} className={`text-[9px] font-black uppercase tracking-widest ${themeClasses.text}`}>Add One Now</button>
+                        <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-3 border-2 border-dashed border-slate-200/20 dark:border-white/5 rounded-[2.5rem] bg-slate-50/10 dark:bg-white/[0.01]">
+                            <Plus size={24} className="opacity-10" />
+                            <p className="text-[10px] font-black uppercase tracking-widest opacity-30">No {activeHabitTab} Rituals</p>
+                            <button onClick={() => { setEditingHabitId(null); setHabitTime(activeHabitTab); setShowHabitModal(true); }} className={`text-[9px] font-black uppercase tracking-widest ${themeClasses.text} opacity-80 hover:opacity-100 transition-opacity`}>Add One Now</button>
                         </div>
                     ) : (
                         filteredHabits.sort((a, b) => {
@@ -296,7 +321,7 @@ export const Dashboard: React.FC<{ setView: (v: string) => void }> = ({ setView 
                             const linkedGoal = goals.find(g => g.id === h.linkedGoalId);
                             const isDone = h.completedDates.includes(today);
                             return (
-                                <div key={h.id} className={`bg-white dark:bg-slate-900 p-4 rounded-[2rem] border transition-all flex items-center shadow-sm group ${isDone ? 'opacity-40 border-transparent bg-slate-50/30 dark:bg-slate-800/20 scale-[0.98]' : 'border-slate-100 dark:border-slate-800 hover:shadow-md'}`}>
+                                <div key={h.id} className={`bg-white dark:bg-slate-900 p-4 rounded-[2rem] border transition-all flex items-center group ${isDone ? 'opacity-40 border-transparent bg-slate-50/30 dark:bg-slate-800/20 scale-[0.98]' : 'border-slate-100 dark:border-slate-800 shadow-sm'}`}>
                                     <div className="min-w-0 flex-1">
                                         <div className="flex items-center gap-2 mb-0.5">
                                             <h4 className={`font-black text-sm leading-tight ${isDone ? 'text-slate-400 line-through' : 'text-slate-800 dark:text-white'}`}>{h.title}</h4>
@@ -328,7 +353,7 @@ export const Dashboard: React.FC<{ setView: (v: string) => void }> = ({ setView 
                                     </div>
                                     <button 
                                         onClick={() => toggleHabitCompletion(h.id, today)}
-                                        className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all shrink-0 ml-4 ${isDone ? `${themeClasses.primary} text-white shadow-lg` : 'bg-slate-50 dark:bg-slate-800 text-slate-300 border border-slate-100 dark:border-slate-700'}`}
+                                        className={`w-10 h-10 rounded-2xl flex items-center justify-center transition-all shrink-0 ml-4 ${isDone ? `${themeClasses.primary} text-white` : 'bg-slate-50 dark:bg-slate-800 text-slate-300 border border-slate-100 dark:border-slate-700 shadow-sm'}`}
                                     >
                                         <Check size={20} strokeWidth={4} />
                                     </button>
@@ -341,7 +366,7 @@ export const Dashboard: React.FC<{ setView: (v: string) => void }> = ({ setView 
 
             {/* HUMANIZED METRICS OVERVIEW */}
             <div className="grid grid-cols-2 gap-4">
-                <div onClick={() => setView('insights')} className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm cursor-pointer active:scale-95 transition-all flex flex-col gap-3">
+                <div onClick={() => setView('insights')} className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 cursor-pointer active:scale-95 transition-all flex flex-col gap-3 shadow-sm hover:shadow-md">
                     <div className="flex justify-between items-start">
                         <div className={`w-8 h-8 rounded-xl ${themeClasses.secondary} ${themeClasses.text} flex items-center justify-center`}>
                             <Star size={16} fill="currentColor" />
@@ -353,7 +378,7 @@ export const Dashboard: React.FC<{ setView: (v: string) => void }> = ({ setView 
                         <p className="text-[9px] font-medium text-slate-400 leading-tight">{t('routine_desc')}</p>
                     </div>
                 </div>
-                <div onClick={() => setView('goals')} className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm cursor-pointer active:scale-95 transition-all flex flex-col gap-3">
+                <div onClick={() => setView('goals')} className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 cursor-pointer active:scale-95 transition-all flex flex-col gap-3 shadow-sm hover:shadow-md">
                     <div className="flex justify-between items-start">
                         <div className={`w-8 h-8 rounded-xl ${themeClasses.secondary} ${themeClasses.text} flex items-center justify-center`}>
                             <Trophy size={16} />
@@ -370,7 +395,7 @@ export const Dashboard: React.FC<{ setView: (v: string) => void }> = ({ setView 
             {/* CREATE/EDIT HABIT MODAL */}
             {showHabitModal && (
                 <div className="fixed inset-0 z-[60] bg-slate-900/60 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-300">
-                    <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[3rem] p-10 shadow-2xl border border-slate-100 dark:border-slate-800 relative animate-in zoom-in-95 duration-300 overflow-hidden flex flex-col max-h-[85vh]">
+                    <div className="bg-white dark:bg-slate-900 w-full max-md rounded-[3rem] p-10 shadow-2xl border border-slate-100 dark:border-slate-800 relative animate-in zoom-in-95 duration-300 overflow-hidden flex flex-col max-h-[85vh]">
                         <button onClick={resetHabitForm} className="absolute top-6 right-6 p-2 text-slate-300 hover:text-slate-500 transition-colors">
                             <X size={20}/>
                         </button>
@@ -430,7 +455,7 @@ export const Dashboard: React.FC<{ setView: (v: string) => void }> = ({ setView 
                                     <select 
                                         value={linkedGoalId}
                                         onChange={e => setLinkedGoalId(e.target.value)}
-                                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-800 rounded-2xl px-4 py-4 text-xs font-bold dark:text-white outline-none"
+                                        className="w-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 rounded-2xl px-4 py-4 text-xs font-bold dark:text-white outline-none"
                                     >
                                         <option value="">(Optional) No linked goal</option>
                                         {goals.filter(g => !g.completed).map(g => (
@@ -457,7 +482,7 @@ export const Dashboard: React.FC<{ setView: (v: string) => void }> = ({ setView 
                                 <button 
                                     type="submit" 
                                     disabled={!habitTitle.trim()}
-                                    className={`w-full bg-gradient-to-br ${themeClasses.gradient} text-white py-5 rounded-3xl font-black text-[10px] uppercase tracking-widest shadow-2xl transition-all active:scale-95 disabled:opacity-50`}
+                                    className={`w-full bg-gradient-to-br ${themeClasses.gradient} text-white py-5 rounded-3xl font-black text-[10px] uppercase tracking-widest shadow-2xl transition-all active:scale-[0.98] disabled:opacity-50`}
                                 >
                                     {editingHabitId ? 'Update Ritual' : 'Deploy Ritual'}
                                 </button>

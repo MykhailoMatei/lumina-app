@@ -1,4 +1,3 @@
-
 import { GoogleGenAI, Type } from "@google/genai";
 import { Goal, AppLanguage, Habit, JournalEntry, DailyBriefing } from "../types";
 
@@ -17,6 +16,57 @@ export const testApiConnection = async () => {
     const res = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: "Reply 'OK'." });
     return { success: !!res.text, message: "AI Connection verified!" };
   } catch (e: any) { return { success: false, message: e.message }; }
+};
+
+export const generateGrowthAudit = async (
+    habits: Habit[], 
+    goals: Goal[], 
+    journal: JournalEntry[], 
+    lang: AppLanguage
+): Promise<{ summary: string, correlation: string, advice: string, trajectory: string }> => {
+    const ai = getAiClient();
+    const context = `
+    Date: ${new Date().toDateString()}
+    Habits: ${habits.map(h => `${h.title} (Time: ${h.timeOfDay}, Streak: ${h.streak})`).join(', ')}
+    Recent Moods (Last 7 days): ${journal.slice(0, 7).map(j => `${j.date}: ${j.mood}`).join('; ')}
+    Active Goals: ${goals.filter(g => !g.completed).map(g => `${g.title} (${g.progress}%)`).join(', ')}
+    `;
+
+    const prompt = `${getLangInstr(lang)} You are a High-Performance Growth Coach. Analyze the user's habit/mood correlation and circadian patterns.
+    JSON structure:
+    - summary: A punchy, 1-sentence executive summary of their current growth state.
+    - correlation: A specific causal link you found (e.g., "Mood peaks significantly when 'Morning' rituals are finished").
+    - advice: One biological or strategic adjustment (e.g., "Shift your hardest habit to your 10 AM power window").
+    - trajectory: A 30-day prediction based on current momentum.
+    Context: ${context}`;
+
+    try {
+        const res = await ai.models.generateContent({
+            model: 'gemini-3-flash-preview',
+            contents: prompt,
+            config: { 
+                responseMimeType: "application/json",
+                responseSchema: {
+                    type: Type.OBJECT,
+                    properties: {
+                        summary: { type: Type.STRING },
+                        correlation: { type: Type.STRING },
+                        advice: { type: Type.STRING },
+                        trajectory: { type: Type.STRING }
+                    },
+                    required: ["summary", "correlation", "advice", "trajectory"]
+                }
+            }
+        });
+        return JSON.parse(res.text || "{}");
+    } catch {
+        return { 
+            summary: "You are maintaining steady momentum.", 
+            correlation: "Consistency is building a foundation for growth.", 
+            advice: "Stay the course and prioritize rest.",
+            trajectory: "Sustainable growth expected over the next month."
+        };
+    }
 };
 
 export const suggestAtomicHabit = async (habitTitle: string, lang: AppLanguage): Promise<{ suggestion: string, reason: string }> => {
@@ -51,8 +101,8 @@ export const suggestAtomicHabit = async (habitTitle: string, lang: AppLanguage):
 
 export const generateDailyBriefing = async (name: string, goals: Goal[], habits: Habit[], recentJournal: JournalEntry[], lang: AppLanguage): Promise<DailyBriefing> => {
   const ai = getAiClient();
-  const context = `User: ${name}. Goals: ${goals.map(g => g.title).join(', ')}. Habits: ${habits.map(h => h.title).join(', ')}. Recent mood: ${recentJournal[0]?.mood || 'N/A'}`;
-  const prompt = `${getLangInstr(lang)} Generate a high-performance daily briefing.
+  const context = `Today's Date: ${new Date().toDateString()}. User: ${name}. Goals: ${goals.map(g => g.title).join(', ')}. Habits: ${habits.map(h => h.title).join(', ')}. Recent mood: ${recentJournal[0]?.mood || 'N/A'}`;
+  const prompt = `${getLangInstr(lang)} Generate a high-performance daily briefing. Ensure the advice is unique for ${new Date().toDateString()}.
   JSON structure:
   - motivation: One powerful mantra for growth.
   - focus: One specific theme for the day.

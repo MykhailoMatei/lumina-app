@@ -1,3 +1,4 @@
+
 import React, { useState } from 'react';
 import { useApp } from './context/AppContext';
 import { AppProvider } from './context/AppContext';
@@ -11,7 +12,7 @@ import { SecurityLock } from './components/SecurityLock';
 import { NotificationSystem } from './components/NotificationSystem';
 
 const AppContent: React.FC = () => {
-  const { isLocked } = useApp();
+  const { isLocked, circadian } = useApp();
   const [view, setView] = useState('dashboard');
 
   if (isLocked) {
@@ -23,7 +24,7 @@ const AppContent: React.FC = () => {
       case 'dashboard':
         return <Dashboard setView={setView} />;
       case 'goals':
-        return <Goals />;
+        return <Goals setView={setView} />;
       case 'journal':
         return <Journal />;
       case 'insights':
@@ -36,11 +37,15 @@ const AppContent: React.FC = () => {
   };
 
   return (
-    <div className="min-h-screen font-sans text-slate-800 dark:text-slate-100 max-w-lg mx-auto bg-slate-50 dark:bg-slate-950 shadow-2xl overflow-hidden relative transition-colors duration-500">
+    <div className={`h-screen h-[100dvh] flex flex-col font-sans text-slate-800 dark:text-slate-100 max-w-lg mx-auto ${circadian.appBg} shadow-2xl overflow-hidden relative transition-colors duration-1000`}>
       <NotificationSystem />
-      <div className="h-full overflow-y-auto pt-safe-content px-6 pb-32">
+      
+      {/* Scrollable Content Area */}
+      <main className="flex-1 overflow-y-auto no-scrollbar scroll-smooth pt-safe-content px-6 pb-32">
         {renderView()}
-      </div>
+      </main>
+
+      {/* Persistent Navigation */}
       <Navigation currentView={view} setView={setView} />
     </div>
   );
