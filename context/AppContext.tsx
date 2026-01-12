@@ -5,7 +5,7 @@ import {
   DailyBriefing, GoalCategory, Post, Comment, Resource, AppNotification 
 } from '../types';
 
-export const APP_VERSION = '1.1.0-tactile';
+export const APP_VERSION = '1.1.1-stable';
 
 export const THEMES: Record<ThemeColor, any> = {
   indigo: { name: 'accent_indigo', primary: 'bg-indigo-600', text: 'text-indigo-600', secondary: 'bg-indigo-50 dark:bg-indigo-900/20', gradient: 'from-indigo-600 to-blue-600', ring: 'ring-indigo-500', border: 'border-indigo-100 dark:border-indigo-900/30' },
@@ -55,8 +55,51 @@ export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
     accent_blue: 'Blue',
     persistence_on: 'Cloud persistence',
     storage_label: 'LocalStorage active',
+    choose_avatar: 'Choose Avatar',
+    growth_traveler: 'Growth Traveler',
   },
-  French: { home: 'Accueil', goals: 'Objectifs', journal: 'Journal', insights: 'Analyses' },
+  French: { 
+    home: 'Accueil', 
+    goals: 'Objectifs', 
+    journal: 'Journal', 
+    insights: 'Analyses',
+    profile: 'Profil',
+    good_morning: 'Bon matin',
+    good_afternoon: 'Bon après-midi',
+    good_evening: 'Bonsoir',
+    daily_wisdom: 'Sagesse quotidienne',
+    habit_rate: 'Succès des habitudes',
+    routine_desc: 'Votre élan quotidien',
+    momentum_desc: 'Voies de croissance',
+    keystone: 'Tâche clé',
+    identity: 'Identité',
+    upload_photo: 'Charger photo',
+    edit: 'Modifier',
+    settings: 'Paramètres',
+    language: 'Langue',
+    dark_mode: 'Mode Sombre',
+    accent_palette: 'Palette d\'accent',
+    ai_connection: 'Connexion IA',
+    api_test: 'Tester l\'IA',
+    notifications_hub: 'Notifications',
+    enable_push: 'Activer les notifications',
+    security: 'Sécurité',
+    app_lock: 'Verrouillage',
+    set_pin: 'Définir PIN',
+    disable: 'Désactiver',
+    export_data: 'Exporter',
+    import_data: 'Importer',
+    delete_account: 'Supprimer données',
+    accent_indigo: 'Indigo',
+    accent_emerald: 'Émeraude',
+    accent_rose: 'Rose',
+    accent_amber: 'Ambre',
+    accent_blue: 'Bleu',
+    persistence_on: 'Persistance cloud',
+    storage_label: 'Stockage local actif',
+    choose_avatar: 'Choisir un avatar',
+    growth_traveler: 'Voyageur de croissance',
+  },
   German: { home: 'Start', goals: 'Ziele', journal: 'Journal', insights: 'Einblicke' },
   Ukrainian: { home: 'Головна', goals: 'Цілі', journal: 'Журнал', insights: 'Інсайти' },
   Spanish: { home: 'Inicio', goals: 'Metas', journal: 'Diario', insights: 'Perspectivas' }
@@ -90,7 +133,6 @@ interface AppContextType extends UserState {
   importData: (json: string) => void;
   deleteAccount: () => void;
   requestPersistence: () => Promise<boolean>;
-  // Fix: Added missing method declarations for Community and Inspiration pages
   addPost: (post: Post) => void;
   likePost: (id: string) => void;
   addComment: (postId: string, comment: Comment) => void;
@@ -151,7 +193,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const circadian = useMemo(() => {
     const hour = new Date().getHours();
     
-    // MORNING - Vibrant Energy
     if (hour >= 5 && hour < 12) return { 
         state: 'Morning', 
         label: 'Awakening Phase', 
@@ -162,7 +203,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         iconContrast: true
     };
     
-    // DAY - Maximum Focus
     if (hour >= 12 && hour < 17) return { 
         state: 'Day', 
         label: 'Performance Phase', 
@@ -173,7 +213,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         iconContrast: true
     };
     
-    // EVENING - Midnight Velvet (Softer on eyes than pure black)
     if (hour >= 17 && hour < 21) return { 
         state: 'Evening', 
         label: 'Reflection Phase', 
@@ -184,7 +223,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         iconContrast: false
     };
     
-    // NIGHT - Restoration (Deep Navy)
     return { 
         state: 'Night', 
         label: 'Restoration Phase', 
@@ -314,10 +352,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const importData = (json: string) => {
     try {
       const parsed = JSON.parse(json);
-      setState(parsed);
+      // Safe Merge Logic: Combine imported data with default state to prevent missing keys
+      const mergedState: UserState = {
+        ...DEFAULT_STATE,
+        ...parsed,
+        securitySettings: { ...DEFAULT_STATE.securitySettings, ...(parsed.securitySettings || {}) },
+        notificationSettings: { ...DEFAULT_STATE.notificationSettings, ...(parsed.notificationSettings || {}) }
+      };
+      setState(mergedState);
       triggerHaptic('success');
-    } catch {
+      alert('Data imported successfully!');
+    } catch (err) {
+      console.error('Import failed', err);
       triggerHaptic('error');
+      alert('Failed to import data. The file might be corrupted.');
     }
   };
 
@@ -336,7 +384,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return false;
   };
 
-  // Fix: Implemented missing community and inspiration related methods in AppProvider
   const addPost = (post: Post) => {
     triggerHaptic('success');
     setState(prev => ({ ...prev, posts: [post, ...prev.posts] }));
