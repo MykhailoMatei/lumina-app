@@ -34,6 +34,7 @@ export interface Goal {
   whatShifted?: string;
   archivedAt?: string;
   startDate?: string;
+  lastUpdated?: number;
 }
 
 export interface Habit {
@@ -47,6 +48,7 @@ export interface Habit {
   linkedGoalId?: string; 
   streak: number;
   completedDates: string[]; 
+  lastUpdated?: number;
 }
 
 export interface JournalEntry {
@@ -60,6 +62,7 @@ export interface JournalEntry {
   linkedGoalId?: string; 
   linkedHabitId?: string;
   imageData?: string; // Base64 image data
+  lastUpdated?: number;
 }
 
 export type ThemeColor = 'indigo' | 'emerald' | 'rose' | 'amber' | 'blue';
@@ -72,8 +75,6 @@ export interface DailyBriefing {
   journalPrompt: string;
   priorityTask?: string; 
 }
-
-export type ServiceName = 'Gemini' | 'Lumina-Core' | 'NodeJS';
 
 export interface AppNotification {
   id: string;
@@ -179,4 +180,9 @@ export interface UserState {
   modules: LearningModule[];
   quizzes: Quiz[];
   savedResourceIds: string[];
+  syncStatus?: {
+    lastSync?: number;
+    status: 'synced' | 'pending' | 'error' | 'disconnected';
+    remoteUrl?: string;
+  };
 }

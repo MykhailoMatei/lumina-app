@@ -1,11 +1,13 @@
 
-import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, ReactNode, useMemo, useCallback, useRef } from 'react';
 import { 
   UserState, Goal, Habit, JournalEntry, ThemeColor, AppLanguage, 
-  DailyBriefing, GoalCategory, Post, Comment, Resource, AppNotification 
+  DailyBriefing, AppNotification, Post, Comment 
 } from '../types';
+import { performCloudSync } from '../services/syncService';
+import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 
-export const APP_VERSION = '1.1.1-stable';
+export const APP_VERSION = '1.4.1-private-core';
 
 export const THEMES: Record<ThemeColor, any> = {
   indigo: { name: 'accent_indigo', primary: 'bg-indigo-600', text: 'text-indigo-600', secondary: 'bg-indigo-50 dark:bg-indigo-900/20', gradient: 'from-indigo-600 to-blue-600', ring: 'ring-indigo-500', border: 'border-indigo-100 dark:border-indigo-900/30' },
@@ -15,463 +17,312 @@ export const THEMES: Record<ThemeColor, any> = {
   blue: { name: 'accent_blue', primary: 'bg-blue-600', text: 'text-blue-600', secondary: 'bg-blue-50 dark:bg-blue-900/20', gradient: 'from-blue-600 to-indigo-600', ring: 'ring-blue-500', border: 'border-blue-100 dark:border-blue-900/30' }
 };
 
-// Added missing German, Ukrainian, and Spanish translations to satisfy AppLanguage type requirement
+const BASE_TRANSLATIONS = {
+  home: 'Home',
+  goals: 'Goals',
+  journal: 'Journal',
+  insights: 'Insights',
+  profile: 'Profile',
+  good_morning: 'Good Morning',
+  good_afternoon: 'Good Afternoon',
+  good_evening: 'Good Evening',
+  daily_wisdom: 'Daily Wisdom',
+  habit_rate: 'Habit Success',
+  routine_desc: 'Your daily momentum',
+  momentum_desc: 'Active growth paths',
+  keystone: 'Keystone Task',
+  identity: 'Identity',
+  upload_photo: 'Upload Photo',
+  edit: 'Edit',
+  settings: 'Settings',
+  language: 'Language',
+  dark_mode: 'Dark Mode',
+  accent_palette: 'Accent Palette',
+  ai_connection: 'AI Connection',
+  api_test: 'Test AI',
+  notifications_hub: 'Notifications',
+  enable_push: 'Enable Notifications',
+  security: 'Security',
+  app_lock: 'App Lock',
+  set_pin: 'Set PIN',
+  disable: 'Disable',
+  export_data: 'Export',
+  import_data: 'Import',
+  delete_account: 'Delete Data',
+  accent_indigo: 'Indigo',
+  accent_emerald: 'Emerald',
+  accent_rose: 'Rose',
+  accent_amber: 'Amber',
+  accent_blue: 'Blue',
+  persistence_on: 'Cloud persistence',
+  storage_label: 'LocalStorage active',
+  choose_avatar: 'Choose Avatar',
+  growth_traveler: 'Growth Traveler',
+  import_success: 'Data integrated successfully.',
+  import_failed: 'Import failed. Check file format.',
+  cloud_core: 'Cloud Core',
+  sync_now: 'Sync Now',
+  last_sync: 'Last synced',
+  syncing: 'Syncing...',
+  remote_url_label: 'Cloud Status',
+  remote_ph: 'Connect to Cloud...',
+  sync_success: 'Cloud data synchronized.',
+  sync_failed: 'Could not sync with cloud.',
+  disconnected: 'Local Only',
+  auth_title: 'Authentication',
+  check_email_msg: 'Success! Please check your email to confirm.',
+  welcome_back: 'Welcome back to Lumina.',
+  auth_error: 'Auth Error',
+  create_account: 'Join Lumina',
+  sync_desc_auth: 'Securely sync your growth map',
+  email_label: 'Email Address',
+  password_label: 'Password',
+  sign_up_btn: 'Create Account',
+  sign_in_btn: 'Enter Lumina',
+  already_have_account: 'Already have an account?',
+  no_account_yet: 'First time here?',
+  sign_in_switch: 'Sign In Instead',
+  sign_up_switch: 'Create Account',
+  account_connected: 'Account Linked',
+  connect_cloud: 'Connect Account',
+  sign_out: 'Disconnect',
+  pin_prompt: 'Enter your PIN to continue',
+  delete_key: 'Delete',
+  encrypted_secure: 'Securely Encrypted',
+  snooze_btn: 'Snooze',
+  done_btn: 'Done',
+  privacy_policy: 'Privacy Policy',
+  adjust_photo: 'Adjust Photo',
+  resize_identity: 'Resize your identity',
+  drag_move: 'Drag to move',
+  zoom_label: 'Zoom',
+  back: 'Back',
+  save: 'Save',
+  delete_account_confirm: 'Are you sure? This will delete all your local data.'
+};
+
 export const TRANSLATIONS: Record<AppLanguage, Record<string, string>> = {
-  English: {
-    home: 'Home',
-    goals: 'Goals',
-    journal: 'Journal',
-    insights: 'Insights',
-    profile: 'Profile',
-    good_morning: 'Good Morning',
-    good_afternoon: 'Good Afternoon',
-    good_evening: 'Good Evening',
-    daily_wisdom: 'Daily Wisdom',
-    habit_rate: 'Habit Success',
-    routine_desc: 'Your daily momentum',
-    momentum_desc: 'Active growth paths',
-    keystone: 'Keystone Task',
-    identity: 'Identity',
-    upload_photo: 'Upload Photo',
-    edit: 'Edit',
-    settings: 'Settings',
-    language: 'Language',
-    dark_mode: 'Dark Mode',
-    accent_palette: 'Accent Palette',
-    ai_connection: 'AI Connection',
-    api_test: 'Test AI',
-    notifications_hub: 'Notifications',
-    enable_push: 'Enable Notifications',
-    security: 'Security',
-    app_lock: 'App Lock',
-    set_pin: 'Set PIN',
-    disable: 'Disable',
-    export_data: 'Export',
-    import_data: 'Import',
-    delete_account: 'Delete Data',
-    accent_indigo: 'Indigo',
-    accent_emerald: 'Emerald',
-    accent_rose: 'Rose',
-    accent_amber: 'Amber',
-    accent_blue: 'Blue',
-    persistence_on: 'Cloud persistence',
-    storage_label: 'LocalStorage active',
-    choose_avatar: 'Choose Avatar',
-    growth_traveler: 'Growth Traveler',
-    import_success: 'Data integrated successfully.',
-    import_failed: 'Import failed. Check file format.',
-  },
-  French: { 
-    home: 'Accueil', 
-    goals: 'Objectifs', 
-    journal: 'Journal', 
-    insights: 'Analyses',
-    profile: 'Profil',
-    good_morning: 'Bon matin',
-    good_afternoon: 'Bon après-midi',
-    good_evening: 'Bonsoir',
-    daily_wisdom: 'Sagesse quotidienne',
-    habit_rate: 'Succès des habitudes',
-    routine_desc: 'Votre élan quotidien',
-    momentum_desc: 'Voies de croissance',
-    keystone: 'Tâche clé',
-    identity: 'Identité',
-    upload_photo: 'Charger photo',
-    edit: 'Modifier',
-    settings: 'Paramètres',
-    language: 'Langue',
-    dark_mode: 'Mode Sombre',
-    accent_palette: 'Palette d\'accent',
-    ai_connection: 'Connexion IA',
-    api_test: 'Tester l\'IA',
-    notifications_hub: 'Notifications',
-    enable_push: 'Activer les notifications',
-    security: 'Sécurité',
-    app_lock: 'Verrouillage',
-    set_pin: 'Définir PIN',
-    disable: 'Désactiver',
-    export_data: 'Exporter',
-    import_data: 'Importer',
-    delete_account: 'Supprimer données',
-    accent_indigo: 'Indigo',
-    accent_emerald: 'Émeraude',
-    accent_rose: 'Rose',
-    accent_amber: 'Ambre',
-    accent_blue: 'Bleu',
-    persistence_on: 'Persistance cloud',
-    storage_label: 'Stockage local actif',
-    choose_avatar: 'Choisir un avatar',
-    growth_traveler: 'Voyageur de croissance',
-    import_success: 'Données intégrées avec succès.',
-    import_failed: 'Échec de l\'importation.',
-  },
-  German: {
-    home: 'Startseite',
-    goals: 'Ziele',
-    journal: 'Journal',
-    insights: 'Einblicke',
-    profile: 'Profil',
-    good_morning: 'Guten Morgen',
-    good_afternoon: 'Guten Tag',
-    good_evening: 'Guten Abend',
-    daily_wisdom: 'Tägliche Weisheit',
-    habit_rate: 'Gewohnheitserfolg',
-    routine_desc: 'Dein täglicher Schwung',
-    momentum_desc: 'Aktive Wachstumswege',
-    keystone: 'Schlüsselaufgabe',
-    identity: 'Identität',
-    upload_photo: 'Foto hochladen',
-    edit: 'Bearbeiten',
-    settings: 'Einstellungen',
-    language: 'Sprache',
-    dark_mode: 'Dunkelmodus',
-    accent_palette: 'Akzentpalette',
-    ai_connection: 'KI-Verbindung',
-    api_test: 'KI testen',
-    notifications_hub: 'Benachrichtigungen',
-    enable_push: 'Benachrichtigungen aktivieren',
-    security: 'Sicherheit',
-    app_lock: 'App-Sperre',
-    set_pin: 'PIN festlegen',
-    disable: 'Deaktivieren',
-    export_data: 'Exportieren',
-    import_data: 'Importieren',
-    delete_account: 'Daten löschen',
-    accent_indigo: 'Indigo',
-    accent_emerald: 'Smaragd',
-    accent_rose: 'Rose',
-    accent_amber: 'Bernstein',
-    accent_blue: 'Blau',
-    persistence_on: 'Cloud-Persistenz',
-    storage_label: 'LocalStorage aktiv',
-    choose_avatar: 'Avatar wählen',
-    growth_traveler: 'Wachstumsreisender',
-    import_success: 'Daten erfolgreich integriert.',
-    import_failed: 'Import fehlgeschlagen.',
-  },
-  Ukrainian: {
-    home: 'Головна',
-    goals: 'Цілі',
-    journal: 'Журнал',
-    insights: 'Аналітика',
-    profile: 'Профіль',
-    good_morning: 'Доброго ранку',
-    good_afternoon: 'Доброго дня',
-    good_evening: 'Доброго вечора',
-    daily_wisdom: 'Щоденна мудрість',
-    habit_rate: 'Успіх звичок',
-    routine_desc: 'Ваш щоденний імпульс',
-    momentum_desc: 'Активні шляхи зростання',
-    keystone: 'Ключове завдання',
-    identity: 'Ідентичність',
-    upload_photo: 'Завантажити фото',
-    edit: 'Редагувати',
-    settings: 'Налаштування',
-    language: 'Мова',
-    dark_mode: 'Темний режим',
-    accent_palette: 'Палітра кольорів',
-    ai_connection: 'Підключення ШІ',
-    api_test: 'Тестувати ШІ',
-    notifications_hub: 'Сповіщення',
-    enable_push: 'Увімкнути сповіщення',
-    security: 'Безпека',
-    app_lock: 'Блокування програми',
-    set_pin: 'Встановити PIN',
-    disable: 'Вимкнути',
-    export_data: 'Експорт',
-    import_data: 'Імпорт',
-    delete_account: 'Видалити дані',
-    accent_indigo: 'Індиго',
-    accent_emerald: 'Смарагдовий',
-    accent_rose: 'Рожевий',
-    accent_amber: 'Бурштиновий',
-    accent_blue: 'Синій',
-    persistence_on: 'Хмарне збереження',
-    storage_label: 'LocalStorage активний',
-    choose_avatar: 'Обрати аватар',
-    growth_traveler: 'Мандрівник зростання',
-    import_success: 'Дані успішно інтегровані.',
-    import_failed: 'Помилка імпорту.',
-  },
-  Spanish: {
-    home: 'Inicio',
-    goals: 'Metas',
-    journal: 'Diario',
-    insights: 'Perspectivas',
-    profile: 'Perfil',
-    good_morning: 'Buenos días',
-    good_afternoon: 'Buenas tardes',
-    good_evening: 'Buenas noches',
-    daily_wisdom: 'Sabiduría diaria',
-    habit_rate: 'Éxito de hábitos',
-    routine_desc: 'Tu impulso diario',
-    momentum_desc: 'Caminos de crecimiento',
-    keystone: 'Tarea clave',
-    identity: 'Identidad',
-    upload_photo: 'Subir foto',
-    edit: 'Editar',
-    settings: 'Ajustes',
-    language: 'Idioma',
-    dark_mode: 'Modo oscuro',
-    accent_palette: 'Paleta de acentos',
-    ai_connection: 'Conexión IA',
-    api_test: 'Probar IA',
-    notifications_hub: 'Notificaciones',
-    enable_push: 'Activar notificaciones',
-    security: 'Seguridad',
-    app_lock: 'Bloqueo de app',
-    set_pin: 'Establecer PIN',
-    disable: 'Desactivar',
-    export_data: 'Exportar',
-    import_data: 'Importar',
-    delete_account: 'Borrar datos',
-    accent_indigo: 'Índigo',
-    accent_emerald: 'Esmeralda',
-    accent_rose: 'Rosa',
-    accent_amber: 'Ámbar',
-    accent_blue: 'Azul',
-    persistence_on: 'Persistencia en la nube',
-    storage_label: 'LocalStorage activo',
-    choose_avatar: 'Elegir avatar',
-    growth_traveler: 'Viajero del crecimiento',
-    import_success: 'Datos integrados correctamente.',
-    import_failed: 'Error al importar.',
-  }
+  English: BASE_TRANSLATIONS,
+  French: { ...BASE_TRANSLATIONS, home: 'Accueil', goals: 'Objectifs' },
+  German: { ...BASE_TRANSLATIONS, home: 'Startseite' },
+  Ukrainian: { ...BASE_TRANSLATIONS, home: 'Головна' },
+  Spanish: { ...BASE_TRANSLATIONS, home: 'Inicio' }
 };
 
 interface AppContextType extends UserState {
   t: (key: string) => string;
   themeClasses: any;
-  circadian: { state: string, label: string, headerGradient: string, appBg: string, glowColor: string, buttonStyle: string, iconContrast: boolean };
+  circadian: {
+    state: string;
+    label: string;
+    headerGradient: string;
+    appBg: string;
+    buttonStyle: string;
+    iconContrast: boolean;
+  };
   isLocked: boolean;
-  isPersistent: boolean;
-  preselectedGoalId: string | null;
-  setPreselectedGoalId: (id: string | null) => void;
-  updateUserPreferences: (prefs: Partial<UserState>) => void;
+  user: any;
   addGoal: (goal: Goal) => void;
-  updateGoal: (id: string, goal: Partial<Goal>) => void;
+  updateGoal: (id: string, updates: Partial<Goal>) => void;
   deleteGoal: (id: string) => void;
   addHabit: (habit: Habit) => void;
-  updateHabit: (id: string, habit: Partial<Habit>) => void;
+  updateHabit: (id: string, updates: Partial<Habit>) => void;
   deleteHabit: (id: string) => void;
   toggleHabitCompletion: (id: string, date: string) => void;
   addJournalEntry: (entry: JournalEntry) => void;
-  updateJournalEntry: (id: string, entry: Partial<JournalEntry>) => void;
+  updateJournalEntry: (id: string, updates: Partial<JournalEntry>) => void;
   deleteJournalEntry: (id: string) => void;
+  updateUserPreferences: (prefs: Partial<UserState>) => void;
   unlockApp: (pin: string) => boolean;
   setPinCode: (pin: string | null) => void;
-  triggerNotification: (title: string, message: string, type: any) => void;
-  dismissNotification: (id: string) => void;
-  snoozeNotification: (id: string) => void;
+  deleteAccount: () => void;
   exportData: () => void;
   importData: (json: string) => void;
-  deleteAccount: () => void;
+  preselectedGoalId: string | null;
+  setPreselectedGoalId: (id: string | null) => void;
+  isPersistent: boolean;
   requestPersistence: () => Promise<boolean>;
-  addPost: (post: Post) => void;
-  likePost: (id: string) => void;
-  addComment: (postId: string, comment: Comment) => void;
-  toggleEventJoin: (id: string) => void;
+  syncWithCloud: () => Promise<void>;
+  signOut: () => Promise<void>;
+  triggerNotification: (title: string, message: string, type: 'achievement' | 'motivation' | 'reminder') => void;
+  dismissNotification: (id: string) => void;
+  snoozeNotification: (id: string) => void;
+  // Fix: Added missing community and resource methods to the interface definition
   toggleResourceFavorite: (id: string) => void;
+  addPost: (post: Post) => Promise<void>;
+  likePost: (postId: string) => Promise<void>;
+  addComment: (postId: string, comment: Comment) => Promise<void>;
+  toggleEventJoin: (eventId: string) => void;
+  refreshCommunity: () => Promise<void>;
 }
 
 const AppContext = createContext<AppContextType | undefined>(undefined);
 
-const STORAGE_KEY = 'lumina_v1_state';
-
-const DEFAULT_STATE: UserState = {
-  name: 'Seeker',
-  avatar: '🌱',
-  goals: [],
-  habits: [],
-  journalEntries: [],
-  theme: 'light',
-  themeColor: 'indigo',
-  language: 'English',
-  securitySettings: { pinCode: null },
-  dashboardLayout: { showGrow: true, showCommunity: true },
-  notificationSettings: {
-    enabled: true,
-    types: { habits: true, goals: true, journal: true, motivation: true }
-  },
-  notifications: [],
-  posts: [],
-  events: [],
-  resources: [],
-  modules: [],
-  quizzes: [],
-  savedResourceIds: []
-};
-
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [state, setState] = useState<UserState>(() => {
-    const saved = localStorage.getItem(STORAGE_KEY);
-    return saved ? JSON.parse(saved) : DEFAULT_STATE;
+    const saved = localStorage.getItem('lumina_state');
+    if (saved) return JSON.parse(saved);
+    return {
+      name: 'Growth Traveler',
+      avatar: '🌱',
+      goals: [],
+      habits: [],
+      journalEntries: [],
+      theme: 'light',
+      themeColor: 'indigo',
+      language: 'English',
+      securitySettings: { pinCode: null },
+      dashboardLayout: { showGrow: true, showCommunity: false },
+      notificationSettings: { enabled: true, types: { habits: true, goals: true, journal: true, motivation: true } },
+      notifications: [],
+      posts: [],
+      events: [],
+      resources: [],
+      modules: [],
+      quizzes: [],
+      savedResourceIds: []
+    };
   });
 
   const [isLocked, setIsLocked] = useState(!!state.securitySettings.pinCode);
-  const [isPersistent, setIsPersistent] = useState(false);
   const [preselectedGoalId, setPreselectedGoalId] = useState<string | null>(null);
+  const [isPersistent, setIsPersistent] = useState(false);
+  const [user, setUser] = useState<any>(null);
+  const syncTimeoutRef = useRef<number | null>(null);
 
   useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
-    if (state.theme === 'dark') document.documentElement.classList.add('dark');
-    else document.documentElement.classList.remove('dark');
+    localStorage.setItem('lumina_state', JSON.stringify(state));
   }, [state]);
 
+  useEffect(() => {
+    if (!isSupabaseConfigured) return;
+    
+    supabase.auth.getSession().then(({ data: { session } }) => {
+        const u = session?.user ?? null;
+        setUser(u);
+        if (u) {
+            performCloudSync(state).then(res => {
+                if (res.success && res.data) setState(s => ({ ...s, ...res.data }));
+            });
+        }
+    });
+
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+      setUser(session?.user ?? null);
+    });
+    return () => subscription.unsubscribe();
+  }, []);
+
+  const triggerAutoSync = useCallback((data: UserState) => {
+    if (!user || !isSupabaseConfigured) return;
+    if (syncTimeoutRef.current) window.clearTimeout(syncTimeoutRef.current);
+    
+    setState(s => ({ ...s, syncStatus: { ...s.syncStatus, status: 'pending' } }));
+    
+    syncTimeoutRef.current = window.setTimeout(async () => {
+        const res = await performCloudSync(data);
+        if (res.success && res.data) {
+            setState(s => ({ ...s, ...res.data }));
+        } else {
+            setState(s => ({ ...s, syncStatus: { ...s.syncStatus, status: 'error' } }));
+        }
+    }, 2000);
+  }, [user]);
+
   const t = useCallback((key: string) => {
-    return TRANSLATIONS[state.language]?.[key] || TRANSLATIONS['English'][key] || key;
+    return TRANSLATIONS[state.language][key] || key;
   }, [state.language]);
 
-  const themeClasses = useMemo(() => THEMES[state.themeColor] || THEMES.indigo, [state.themeColor]);
+  const themeClasses = useMemo(() => THEMES[state.themeColor], [state.themeColor]);
 
   const circadian = useMemo(() => {
     const hour = new Date().getHours();
-    
-    if (hour >= 5 && hour < 12) return { 
-        state: 'Morning', 
-        label: 'Awakening Phase', 
-        headerGradient: 'from-amber-400/90 to-orange-500/90', 
-        glowColor: 'rgba(245,158,11,0.2)', 
-        appBg: 'bg-[#fcfcfd] dark:bg-slate-950',
-        buttonStyle: 'bg-white shadow-xl text-slate-900',
-        iconContrast: true
-    };
-    
-    if (hour >= 12 && hour < 17) return { 
-        state: 'Day', 
-        label: 'Performance Phase', 
-        headerGradient: 'from-blue-400/90 to-indigo-600/90', 
-        glowColor: 'rgba(59,130,246,0.2)', 
-        appBg: 'bg-white dark:bg-slate-900',
-        buttonStyle: 'bg-white shadow-xl text-slate-900',
-        iconContrast: true
-    };
-    
-    if (hour >= 17 && hour < 21) return { 
-        state: 'Evening', 
-        label: 'Reflection Phase', 
-        headerGradient: 'from-[#1e1b4b] via-[#0f172a] to-[#0a0f1e]', 
-        glowColor: 'rgba(79,70,229,0.2)', 
-        appBg: 'bg-[#0a0f1e] dark:bg-[#0a0f1e]',
-        buttonStyle: 'bg-white/10 backdrop-blur-2xl border border-white/10 text-white shadow-none',
-        iconContrast: false
-    };
-    
-    return { 
-        state: 'Night', 
-        label: 'Restoration Phase', 
-        headerGradient: 'from-[#030712] via-[#020617] to-[#000000]', 
-        glowColor: 'rgba(30,41,59,0.2)', 
-        appBg: 'bg-[#030712] dark:bg-[#030712]',
-        buttonStyle: 'bg-white/5 backdrop-blur-3xl border border-white/5 text-white/70 shadow-none',
-        iconContrast: false
-    };
+    if (hour >= 5 && hour < 12) return { state: 'Morning', label: 'Sunrise Phase', headerGradient: 'from-amber-400 to-orange-500', appBg: 'bg-orange-50/30 dark:bg-slate-950', buttonStyle: 'bg-white/20 text-white', iconContrast: false };
+    if (hour >= 12 && hour < 17) return { state: 'Day', label: 'Solar Zenith', headerGradient: 'from-blue-400 to-indigo-600', appBg: 'bg-indigo-50/30 dark:bg-slate-950', buttonStyle: 'bg-white/20 text-white', iconContrast: false };
+    if (hour >= 17 && hour < 22) return { state: 'Evening', label: 'Golden Hour', headerGradient: 'from-rose-400 to-purple-600', appBg: 'bg-rose-50/30 dark:bg-slate-950', buttonStyle: 'bg-white/20 text-white', iconContrast: false };
+    return { state: 'Night', label: 'Lunar Rest', headerGradient: 'from-slate-800 to-slate-950', appBg: 'bg-slate-900 dark:bg-slate-950', buttonStyle: 'bg-white/10 text-white', iconContrast: false };
   }, []);
-
-  const triggerHaptic = (type: 'success' | 'error' | 'medium') => {
-    if (typeof window !== 'undefined' && window.navigator && window.navigator.vibrate) {
-      if (type === 'success') window.navigator.vibrate([10, 30, 10]);
-      else if (type === 'error') window.navigator.vibrate([50, 100, 50]);
-      else window.navigator.vibrate(15);
-    }
-  };
-
-  const updateUserPreferences = (prefs: Partial<UserState>) => {
-    setState(prev => ({ ...prev, ...prefs }));
-  };
-
-  const triggerNotification = useCallback((title: string, message: string, type: any) => {
-    const id = Date.now().toString();
-    setState(prev => ({ ...prev, notifications: [{ id, title, message, type }, ...prev.notifications] }));
-  }, []);
-
-  const dismissNotification = (id: string) => {
-    setState(prev => ({ ...prev, notifications: prev.notifications.filter(n => n.id !== id) }));
-  };
-
-  const snoozeNotification = (id: string) => {
-    dismissNotification(id);
-    setTimeout(() => {
-      const n = state.notifications.find(notif => notif.id === id);
-      if (n) triggerNotification(n.title, `Snoozed: ${n.message}`, n.type);
-    }, 300000);
-  };
 
   const addGoal = (goal: Goal) => {
-    triggerHaptic('success');
-    setState(prev => ({ ...prev, goals: [goal, ...prev.goals] }));
+    const newState = { ...state, goals: [{ ...goal, lastUpdated: Date.now() }, ...state.goals] };
+    setState(newState);
+    triggerAutoSync(newState);
   };
-
   const updateGoal = (id: string, updates: Partial<Goal>) => {
-    setState(prev => ({
-      ...prev,
-      goals: prev.goals.map(g => g.id === id ? { ...g, ...updates } : g)
-    }));
+    const newState = { ...state, goals: state.goals.map(g => g.id === id ? { ...g, ...updates, lastUpdated: Date.now() } : g) };
+    setState(newState);
+    triggerAutoSync(newState);
   };
-
   const deleteGoal = (id: string) => {
-    setState(prev => ({ ...prev, goals: prev.goals.filter(g => g.id !== id) }));
+    const newState = { ...state, goals: state.goals.filter(g => g.id !== id) };
+    setState(newState);
+    triggerAutoSync(newState);
   };
 
   const addHabit = (habit: Habit) => {
-    triggerHaptic('success');
-    setState(prev => ({ ...prev, habits: [habit, ...prev.habits] }));
+    const newState = { ...state, habits: [{ ...habit, lastUpdated: Date.now() }, ...state.habits] };
+    setState(newState);
+    triggerAutoSync(newState);
   };
-
   const updateHabit = (id: string, updates: Partial<Habit>) => {
-    setState(prev => ({
-      ...prev,
-      habits: prev.habits.map(h => h.id === id ? { ...h, ...updates } : h)
-    }));
+    const newState = { ...state, habits: state.habits.map(h => h.id === id ? { ...h, ...updates, lastUpdated: Date.now() } : h) };
+    setState(newState);
+    triggerAutoSync(newState);
   };
-
   const deleteHabit = (id: string) => {
-    setState(prev => ({ ...prev, habits: prev.habits.filter(h => h.id !== id) }));
+    const newState = { ...state, habits: state.habits.filter(h => h.id !== id) };
+    setState(newState);
+    triggerAutoSync(newState);
   };
-
+  
   const toggleHabitCompletion = (id: string, date: string) => {
-    triggerHaptic('medium');
-    setState(prev => ({
-      ...prev,
-      habits: prev.habits.map(h => {
-        if (h.id === id) {
-          const completed = h.completedDates.includes(date);
-          const newDates = completed ? h.completedDates.filter(d => d !== date) : [...h.completedDates, date];
-          return { ...h, completedDates: newDates, streak: completed ? Math.max(0, h.streak - 1) : h.streak + 1 };
-        }
-        return h;
-      })
-    }));
+    const updatedHabits = state.habits.map(h => {
+      if (h.id === id) {
+        const completed = h.completedDates.includes(date);
+        const newDates = completed ? h.completedDates.filter(d => d !== date) : [...h.completedDates, date];
+        return { ...h, completedDates: newDates, streak: completed ? Math.max(0, h.streak - 1) : h.streak + 1, lastUpdated: Date.now() };
+      }
+      return h;
+    });
+    const newState = { ...state, habits: updatedHabits };
+    setState(newState);
+    triggerAutoSync(newState);
   };
 
   const addJournalEntry = (entry: JournalEntry) => {
-    triggerHaptic('success');
-    setState(prev => ({ ...prev, journalEntries: [entry, ...prev.journalEntries] }));
+    const newState = { ...state, journalEntries: [{ ...entry, lastUpdated: Date.now() }, ...state.journalEntries] };
+    setState(newState);
+    triggerAutoSync(newState);
   };
-
   const updateJournalEntry = (id: string, updates: Partial<JournalEntry>) => {
-    setState(prev => ({
-      ...prev,
-      journalEntries: prev.journalEntries.map(e => e.id === id ? { ...e, ...updates } : e)
-    }));
+    const newState = { ...state, journalEntries: state.journalEntries.map(e => e.id === id ? { ...e, ...updates, lastUpdated: Date.now() } : e) };
+    setState(newState);
+    triggerAutoSync(newState);
+  };
+  const deleteJournalEntry = (id: string) => {
+    const newState = { ...state, journalEntries: state.journalEntries.filter(e => e.id !== id) };
+    setState(newState);
+    triggerAutoSync(newState);
   };
 
-  const deleteJournalEntry = (id: string) => {
-    setState(prev => ({ ...prev, journalEntries: prev.journalEntries.filter(e => e.id !== id) }));
-  };
+  const updateUserPreferences = (prefs: Partial<UserState>) => setState(s => ({ ...s, ...prefs }));
 
   const unlockApp = (pin: string) => {
     if (pin === state.securitySettings.pinCode) {
       setIsLocked(false);
-      triggerHaptic('success');
       return true;
     }
-    triggerHaptic('error');
     return false;
   };
 
   const setPinCode = (pin: string | null) => {
-    setState(prev => ({ ...prev, securitySettings: { ...prev.securitySettings, pinCode: pin } }));
+    setState(s => ({ ...s, securitySettings: { ...s.securitySettings, pinCode: pin } }));
+    if (!pin) setIsLocked(false);
+  };
+
+  const deleteAccount = () => {
+    localStorage.removeItem('lumina_state');
+    window.location.reload();
   };
 
   const exportData = () => {
@@ -485,50 +336,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const importData = (json: string) => {
     try {
-      // Clean input: remove common markdown headers or leading/trailing text if user pasted from chat
-      let cleaned = json.trim();
-      if (cleaned.includes('--- START OF FILE')) {
-          cleaned = cleaned.split('\n').slice(1).join('\n');
-      }
-      if (cleaned.includes('```')) {
-          cleaned = cleaned.replace(/```json|```/g, '').trim();
-      }
-
-      const parsed = JSON.parse(cleaned);
-      if (!parsed || typeof parsed !== 'object') throw new Error("Invalid structure");
-
-      // Robust Merge Logic
-      const mergedState: UserState = {
-        ...DEFAULT_STATE,
-        ...parsed,
-        securitySettings: { ...DEFAULT_STATE.securitySettings, ...(parsed.securitySettings || {}) },
-        notificationSettings: { ...DEFAULT_STATE.notificationSettings, ...(parsed.notificationSettings || {}) }
-      };
-
-      // Reset stale or future-dated briefings to prevent logic lock
-      if (mergedState.lastBriefingUpdate && mergedState.lastBriefingUpdate > Date.now()) {
-          mergedState.lastBriefingUpdate = undefined;
-          mergedState.dailyBriefing = undefined;
-      }
-
-      setState(mergedState);
-      
-      // Force sync dependent UI states
-      setIsLocked(!!mergedState.securitySettings.pinCode);
-      
-      triggerHaptic('success');
-      triggerNotification(t('import_data'), t('import_success'), 'achievement');
-    } catch (err) {
-      console.error('Import failed', err);
-      triggerHaptic('error');
-      triggerNotification(t('import_data'), t('import_failed'), 'reminder');
+      const data = JSON.parse(json);
+      setState(data);
+    } catch (e) {
+      alert(t('import_failed'));
     }
-  };
-
-  const deleteAccount = () => {
-    localStorage.removeItem(STORAGE_KEY);
-    setState(DEFAULT_STATE);
-    window.location.reload();
   };
 
   const requestPersistence = async () => {
@@ -540,70 +352,132 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     return false;
   };
 
-  const addPost = (post: Post) => {
-    triggerHaptic('success');
-    setState(prev => ({ ...prev, posts: [post, ...prev.posts] }));
+  const syncWithCloud = async () => {
+    const res = await performCloudSync(state);
+    if (res.success && res.data) {
+      setState(s => ({ ...s, ...res.data }));
+      triggerNotification(t('cloud_core'), t('sync_success'), 'achievement');
+    } else {
+      triggerNotification(t('cloud_core'), res.message || t('sync_failed'), 'reminder');
+    }
   };
 
-  const likePost = (id: string) => {
-    triggerHaptic('medium');
-    setState(prev => ({
-      ...prev,
-      posts: prev.posts.map(p => {
-        if (p.id === id) {
-          const isLiked = p.likedBy.includes('me');
-          const newLikedBy = isLiked ? p.likedBy.filter(u => u !== 'me') : [...p.likedBy, 'me'];
-          return { ...p, likes: isLiked ? Math.max(0, p.likes - 1) : p.likes + 1, likedBy: newLikedBy };
+  const signOut = async () => {
+    if (!isSupabaseConfigured) return;
+    await supabase.auth.signOut();
+  };
+
+  const triggerNotification = (title: string, message: string, type: 'achievement' | 'motivation' | 'reminder') => {
+    const id = Date.now().toString();
+    setState(s => ({ ...s, notifications: [{ id, title, message, type }, ...s.notifications] }));
+  };
+
+  const dismissNotification = (id: string) => setState(s => ({ ...s, notifications: s.notifications.filter(n => n.id !== id) }));
+  const snoozeNotification = (id: string) => {
+    dismissNotification(id);
+    setTimeout(() => triggerNotification('Reminder', 'Snoozed notification is back', 'reminder'), 300000);
+  };
+
+  // Fix: Implemented missing community and resource methods in the AppProvider
+  const toggleResourceFavorite = (id: string) => {
+    setState(s => {
+      const isSaved = s.savedResourceIds.includes(id);
+      const newSaved = isSaved ? s.savedResourceIds.filter(rid => rid !== id) : [...s.savedResourceIds, id];
+      return { ...s, savedResourceIds: newSaved };
+    });
+  };
+
+  const addPost = async (post: Post) => {
+    setState(s => ({ ...s, posts: [post, ...s.posts] }));
+  };
+
+  const likePost = async (postId: string) => {
+    setState(s => ({
+      ...s,
+      posts: s.posts.map(p => {
+        if (p.id === postId) {
+          const isLiked = p.likedBy.includes(user?.id || 'me');
+          const newLikedBy = isLiked 
+            ? p.likedBy.filter(uid => uid !== (user?.id || 'me')) 
+            : [...p.likedBy, user?.id || 'me'];
+          return { ...p, likedBy: newLikedBy, likes: isLiked ? p.likes - 1 : p.likes + 1 };
         }
         return p;
       })
     }));
   };
 
-  const addComment = (postId: string, comment: Comment) => {
-    triggerHaptic('success');
-    setState(prev => ({
-      ...prev,
-      posts: prev.posts.map(p => p.id === postId ? { ...p, comments: [...p.comments, comment] } : p)
+  const addComment = async (postId: string, comment: Comment) => {
+    setState(s => ({
+      ...s,
+      posts: s.posts.map(p => p.id === postId ? { ...p, comments: [...(p.comments || []), comment] } : p)
     }));
   };
 
-  const toggleEventJoin = (id: string) => {
-    triggerHaptic('medium');
-    setState(prev => ({
-      ...prev,
-      events: prev.events.map(e => e.id === id ? { ...e, joined: !e.joined } : e)
+  const toggleEventJoin = (eventId: string) => {
+    setState(s => ({
+      ...s,
+      events: s.events.map(e => {
+        if (e.id === eventId) {
+          const joined = !e.joined;
+          return { ...e, joined, participants: joined ? e.participants + 1 : e.participants - 1 };
+        }
+        return e;
+      })
     }));
   };
 
-  const toggleResourceFavorite = (id: string) => {
-    triggerHaptic('medium');
-    setState(prev => {
-      const isSaved = prev.savedResourceIds.includes(id);
-      const newSaved = isSaved ? prev.savedResourceIds.filter(rid => rid !== id) : [...prev.savedResourceIds, id];
-      return { ...prev, savedResourceIds: newSaved };
-    });
+  const refreshCommunity = async () => {
+    // Simulated remote fetch for community content
+    return new Promise<void>(resolve => setTimeout(resolve, 800));
   };
 
-  return (
-    <AppContext.Provider value={{
-      ...state,
-      t, themeClasses, circadian, isLocked, isPersistent,
-      preselectedGoalId, setPreselectedGoalId,
-      updateUserPreferences, addGoal, updateGoal, deleteGoal,
-      addHabit, updateHabit, deleteHabit, toggleHabitCompletion,
-      addJournalEntry, updateJournalEntry, deleteJournalEntry,
-      unlockApp, setPinCode, triggerNotification, dismissNotification, snoozeNotification,
-      exportData, importData, deleteAccount, requestPersistence,
-      addPost, likePost, addComment, toggleEventJoin, toggleResourceFavorite
-    }}>
-      {children}
-    </AppContext.Provider>
-  );
+  const value: AppContextType = {
+    ...state,
+    t,
+    themeClasses,
+    circadian,
+    isLocked,
+    user,
+    addGoal,
+    updateGoal,
+    deleteGoal,
+    addHabit,
+    updateHabit,
+    deleteHabit,
+    toggleHabitCompletion,
+    addJournalEntry,
+    updateJournalEntry,
+    deleteJournalEntry,
+    updateUserPreferences,
+    unlockApp,
+    setPinCode,
+    deleteAccount,
+    exportData,
+    importData,
+    preselectedGoalId,
+    setPreselectedGoalId,
+    isPersistent,
+    requestPersistence,
+    syncWithCloud,
+    signOut,
+    triggerNotification,
+    dismissNotification,
+    snoozeNotification,
+    // Fix: Exported missing methods to the context value object
+    toggleResourceFavorite,
+    addPost,
+    likePost,
+    addComment,
+    toggleEventJoin,
+    refreshCommunity
+  };
+
+  return <AppContext.Provider value={value}>{children}</AppContext.Provider>;
 };
 
 export const useApp = () => {
   const context = useContext(AppContext);
-  if (!context) throw new Error('useApp must be used within an AppProvider');
+  if (context === undefined) throw new Error('useApp must be used within an AppProvider');
   return context;
 };
