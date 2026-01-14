@@ -151,6 +151,11 @@ export interface UserState {
   goals: Goal[];
   habits: Habit[];
   journalEntries: JournalEntry[];
+  deletedIds: {
+    goals: string[];
+    habits: string[];
+    journalEntries: string[];
+  };
   theme: 'light' | 'dark';
   themeColor: ThemeColor;
   language: AppLanguage; 

@@ -7,7 +7,7 @@ import {
 import { performCloudSync } from '../services/syncService';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 
-export const APP_VERSION = '1.4.1-private-core';
+export const APP_VERSION = '1.4.2-sync-delete-core';
 
 export const THEMES: Record<ThemeColor, any> = {
   indigo: { name: 'accent_indigo', primary: 'bg-indigo-600', text: 'text-indigo-600', secondary: 'bg-indigo-50 dark:bg-indigo-900/20', gradient: 'from-indigo-600 to-blue-600', ring: 'ring-indigo-500', border: 'border-indigo-100 dark:border-indigo-900/30' },
@@ -147,7 +147,6 @@ interface AppContextType extends UserState {
   triggerNotification: (title: string, message: string, type: 'achievement' | 'motivation' | 'reminder') => void;
   dismissNotification: (id: string) => void;
   snoozeNotification: (id: string) => void;
-  // Fix: Added missing community and resource methods to the interface definition
   toggleResourceFavorite: (id: string) => void;
   addPost: (post: Post) => Promise<void>;
   likePost: (postId: string) => Promise<void>;
@@ -168,6 +167,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       goals: [],
       habits: [],
       journalEntries: [],
+      deletedIds: { goals: [], habits: [], journalEntries: [] },
       theme: 'light',
       themeColor: 'indigo',
       language: 'English',
@@ -222,7 +222,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     syncTimeoutRef.current = window.setTimeout(async () => {
         const res = await performCloudSync(data);
         if (res.success && res.data) {
-            setState(s => ({ ...s, ...res.data }));
+            setState(s => {
+              // Clear deletedIds that were successfully synced
+              const nextState = { ...s, ...res.data };
+              if (res.success) {
+                nextState.deletedIds = { goals: [], habits: [], journalEntries: [] };
+              }
+              return nextState;
+            });
         } else {
             setState(s => ({ ...s, syncStatus: { ...s.syncStatus, status: 'error' } }));
         }
@@ -254,7 +261,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     triggerAutoSync(newState);
   };
   const deleteGoal = (id: string) => {
-    const newState = { ...state, goals: state.goals.filter(g => g.id !== id) };
+    const newState = { 
+      ...state, 
+      goals: state.goals.filter(g => g.id !== id),
+      deletedIds: { ...state.deletedIds, goals: [...state.deletedIds.goals, id] }
+    };
     setState(newState);
     triggerAutoSync(newState);
   };
@@ -270,7 +281,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     triggerAutoSync(newState);
   };
   const deleteHabit = (id: string) => {
-    const newState = { ...state, habits: state.habits.filter(h => h.id !== id) };
+    const newState = { 
+      ...state, 
+      habits: state.habits.filter(h => h.id !== id),
+      deletedIds: { ...state.deletedIds, habits: [...state.deletedIds.habits, id] }
+    };
     setState(newState);
     triggerAutoSync(newState);
   };
@@ -300,7 +315,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     triggerAutoSync(newState);
   };
   const deleteJournalEntry = (id: string) => {
-    const newState = { ...state, journalEntries: state.journalEntries.filter(e => e.id !== id) };
+    const newState = { 
+      ...state, 
+      journalEntries: state.journalEntries.filter(e => e.id !== id),
+      deletedIds: { ...state.deletedIds, journalEntries: [...state.deletedIds.journalEntries, id] }
+    };
     setState(newState);
     triggerAutoSync(newState);
   };
@@ -355,7 +374,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const syncWithCloud = async () => {
     const res = await performCloudSync(state);
     if (res.success && res.data) {
-      setState(s => ({ ...s, ...res.data }));
+      setState(s => ({ 
+        ...s, 
+        ...res.data,
+        deletedIds: { goals: [], habits: [], journalEntries: [] }
+      }));
       triggerNotification(t('cloud_core'), t('sync_success'), 'achievement');
     } else {
       triggerNotification(t('cloud_core'), res.message || t('sync_failed'), 'reminder');
@@ -378,7 +401,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     setTimeout(() => triggerNotification('Reminder', 'Snoozed notification is back', 'reminder'), 300000);
   };
 
-  // Fix: Implemented missing community and resource methods in the AppProvider
   const toggleResourceFavorite = (id: string) => {
     setState(s => {
       const isSaved = s.savedResourceIds.includes(id);
@@ -428,7 +450,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   };
 
   const refreshCommunity = async () => {
-    // Simulated remote fetch for community content
     return new Promise<void>(resolve => setTimeout(resolve, 800));
   };
 
@@ -464,7 +485,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     triggerNotification,
     dismissNotification,
     snoozeNotification,
-    // Fix: Exported missing methods to the context value object
     toggleResourceFavorite,
     addPost,
     likePost,
