@@ -7,7 +7,7 @@ import {
     Trash2, ListPlus, Calendar, Info, Pencil, Zap, BookOpen, 
     Activity, PauseCircle, PlayCircle, Archive, ArrowRight, RotateCcw,
     Leaf, Sun, Wind, Snowflake, History, Quote, Compass, Clock, Heart,
-    Share2, ExternalLink, Flame, Sprout
+    Share2, ExternalLink, Flame, Sprout, AlertCircle
 } from 'lucide-react';
 import { generateMilestonesForGoal } from '../services/geminiService';
 
@@ -16,12 +16,15 @@ interface GoalsProps {
 }
 
 export const Goals: React.FC<GoalsProps> = ({ setView }) => {
-    const { goals, habits, journalEntries, addGoal, updateGoal, deleteGoal, addHabit, toggleHabitCompletion, setPreselectedGoalId, themeClasses, t, language } = useApp();
+    const { goals, habits, journalEntries, addGoal, updateGoal, deleteGoal, addHabit, toggleHabitCompletion, setPreselectedGoalId, themeClasses, t, language, triggerNotification } = useApp();
     const [activeTab, setActiveTab] = useState<'active' | 'needs' | 'hall'>('active');
     const [showModal, setShowModal] = useState(false);
     const [expandedGoalId, setExpandedGoalId] = useState<string | null>(null);
     const [generating, setGenerating] = useState(false);
     const [editingGoalId, setEditingGoalId] = useState<string | null>(null);
+
+    // Confirmation State for deletion (Mobile-safe alternative to window.confirm)
+    const [confirmingDeleteId, setConfirmingDeleteId] = useState<string | null>(null);
 
     // Archiving Flow State
     const [showArchiveFlow, setShowArchiveFlow] = useState<string | null>(null);
@@ -81,7 +84,9 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                 };
             });
 
-            const progress = Math.round((updatedMilestones.filter(m => m.completed).length / updatedMilestones.length) * 100);
+            const totalMilestones = updatedMilestones.length;
+            const completedCount = updatedMilestones.filter(m => m.completed).length;
+            const progress = totalMilestones > 0 ? Math.round((completedCount / totalMilestones) * 100) : 0;
 
             updateGoal(editingGoalId, {
                 title,
@@ -137,7 +142,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
         if (!title.trim()) return;
         setGenerating(true);
         const results = await generateMilestonesForGoal(title, language);
-        setMilestones(prev => [...prev, ...results]);
+        setMilestones(prev => [...prev, ...(Array.isArray(results) ? results : [])]);
         setGenerating(false);
     };
 
@@ -150,10 +155,24 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
 
     const toggleMilestone = (goalId: string, mid: string) => {
         const goal = goals.find(g => g.id === goalId);
-        if (!goal) return;
+        if (!goal || goal.completed) return;
         const newMilestones = goal.milestones.map(m => m.id === mid ? { ...m, completed: !m.completed } : m);
-        const progress = Math.round((newMilestones.filter(m => m.completed).length / newMilestones.length) * 100);
+        const totalSteps = newMilestones.length;
+        const finishedSteps = newMilestones.filter(m => m.completed).length;
+        const progress = totalSteps > 0 ? Math.round((finishedSteps / totalSteps) * 100) : 0;
         updateGoal(goalId, { milestones: newMilestones, progress, completed: progress === 100 });
+    };
+
+    const deleteMilestoneFromGoal = (goalId: string, mid: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        const goal = goals.find(g => g.id === goalId);
+        if (!goal || goal.completed) return;
+        const newMilestones = goal.milestones.filter(m => m.id !== mid);
+        const totalSteps = newMilestones.length;
+        const finishedSteps = newMilestones.filter(m => m.completed).length;
+        const progress = totalSteps > 0 ? Math.round((finishedSteps / totalSteps) * 100) : 0;
+        updateGoal(goalId, { milestones: newMilestones, progress, completed: progress === 100 });
+        triggerNotification('Step Removed', 'A milestone has been removed.', 'reminder');
     };
 
     const getMomentum = (goal: Goal) => {
@@ -189,9 +208,12 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
         setArchiveStayed('');
         setArchiveShifted('');
         setArchiveImpact('');
+        setExpandedGoalId(null);
+        triggerNotification('Milestone Achieved', 'This path is now a permanent part of your journey.', 'achievement');
     };
 
-    const revisitGoal = (goal: Goal) => {
+    const revisitGoal = (goal: Goal, e: React.MouseEvent) => {
+        e.stopPropagation();
         addGoal({
             ...goal,
             id: Date.now().toString(),
@@ -205,12 +227,14 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
         setExpandedGoalId(null);
     };
 
-    const onReflectAction = (goalId: string) => {
+    const onReflectAction = (goalId: string, e: React.MouseEvent) => {
+        e.stopPropagation();
         setPreselectedGoalId(goalId);
         setView('journal');
     };
 
-    const extractRitualFromGoal = (goal: Goal) => {
+    const extractRitualFromGoal = (goal: Goal, e: React.MouseEvent) => {
+        e.stopPropagation();
         addHabit({
             id: Date.now().toString(),
             title: `Ritual: ${goal.title}`,
@@ -219,6 +243,20 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
             completedDates: [],
             linkedGoalId: goal.id
         });
+        triggerNotification('Ritual Created', 'New ritual extracted from your growth path.', 'achievement');
+    };
+
+    const handleDeleteGoalRequest = (id: string, e: React.MouseEvent) => {
+        e.stopPropagation();
+        if (confirmingDeleteId === id) {
+            deleteGoal(id);
+            setExpandedGoalId(null);
+            setConfirmingDeleteId(null);
+            triggerNotification('Path Removed', 'Growth path has been permanently deleted.', 'reminder');
+        } else {
+            setConfirmingDeleteId(id);
+            setTimeout(() => setConfirmingDeleteId(prev => prev === id ? null : prev), 3000);
+        }
     };
 
     return (
@@ -229,6 +267,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                     <h1 className="text-xl font-black text-slate-800 dark:text-slate-100 tracking-tight">Growth Map</h1>
                 </div>
                 <button 
+                    type="button"
                     onClick={() => setShowModal(true)} 
                     className={`${themeClasses.primary} text-white px-3 py-1.5 rounded-lg flex items-center gap-2 shadow-sm active:scale-95 transition-all text-[8px] font-black uppercase tracking-widest`}
                 >
@@ -237,16 +276,17 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
             </div>
 
             {/* TAB SELECTOR */}
-            <div className="bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-100 dark:border-slate-800 flex">
+            <div className="bg-white dark:bg-slate-900 p-1 rounded-xl border border-slate-100 dark:border-slate-800 flex shadow-sm">
                 {(['active', 'needs', 'hall'] as const).map(tab => (
                     <button 
                         key={tab} 
+                        type="button"
                         onClick={() => setActiveTab(tab)} 
-                        className={`flex-1 py-2 text-[8px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center justify-center gap-2 ${activeTab === tab ? 'bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white border border-slate-100 dark:border-slate-700' : 'text-slate-300'}`}
+                        className={`flex-1 py-2 text-[8px] font-black uppercase tracking-widest rounded-lg transition-all flex items-center justify-center gap-2 ${activeTab === tab ? 'bg-slate-50 dark:bg-slate-800 text-slate-800 dark:text-white border border-slate-100 dark:border-slate-700 shadow-sm' : 'text-slate-300'}`}
                     >
                         {tab === 'active' && <Compass size={10} className={activeTab === tab ? themeClasses.text : ''} />}
                         {tab === 'needs' && <PauseCircle size={10} />}
-                        {tab === 'hall' && <History size={10} />}
+                        {tab === 'hall' && <Trophy size={10} />}
                         {tab === 'active' ? 'Nurturing' : tab === 'needs' ? 'Resting' : 'Journey'}
                     </button>
                 ))}
@@ -259,7 +299,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                         {activeTab === 'hall' ? (
                             <div className="space-y-4 opacity-50">
                                 <div className="p-6 bg-slate-100 dark:bg-slate-800 rounded-full w-fit mx-auto">
-                                    <History size={32} className="text-slate-400" />
+                                    <Trophy size={32} className="text-slate-400" />
                                 </div>
                                 <div className="space-y-2">
                                     <p className="text-[11px] font-black uppercase tracking-[0.25em] text-slate-500 dark:text-slate-400">Your Journey Awaits</p>
@@ -287,12 +327,13 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                     <Sprout size={36} className={`${themeClasses.text} relative z-10`} />
                                 </div>
                                 <div className="space-y-3">
-                                    <p className="text-[12px] font-black uppercase tracking-[0.25em] text-slate-600 dark:text-slate-300">A Blank Canvas</p>
+                                    <p className="text-sm font-black uppercase tracking-[0.25em] text-slate-600 dark:text-slate-300">A Blank Canvas</p>
                                     <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500 leading-relaxed max-w-[240px] mx-auto italic">
                                         "A vision without structure is just a dream." Plant your first seed to begin the transformation.
                                     </p>
                                     <div className="pt-6">
                                         <button 
+                                            type="button"
                                             onClick={() => setShowModal(true)}
                                             className={`px-8 py-3.5 rounded-2xl ${themeClasses.primary} text-white text-[9px] font-black uppercase tracking-[0.2em] shadow-lg active:scale-95 transition-all hover:tracking-[0.25em]`}
                                         >
@@ -314,7 +355,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
 
                         if (goal.completed) {
                             return (
-                                <div key={goal.id} className={`bg-white dark:bg-slate-900 rounded-[1.5rem] border transition-all overflow-hidden ${expandedGoalId === goal.id ? 'border-slate-200 dark:border-slate-700' : 'border-slate-50 dark:border-slate-800'}`}>
+                                <div key={goal.id} className={`bg-white dark:bg-slate-900 rounded-[1.5rem] border transition-all overflow-hidden ${expandedGoalId === goal.id ? 'border-slate-200 dark:border-slate-700 shadow-md' : 'border-slate-50 dark:border-slate-800 shadow-sm'}`}>
                                     <div 
                                         onClick={() => setExpandedGoalId(expandedGoalId === goal.id ? null : goal.id)}
                                         className="p-4 flex flex-col cursor-pointer"
@@ -322,7 +363,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                         <div className="flex justify-between items-start mb-4">
                                             <div className="flex items-center gap-3">
                                                 <div className={`w-9 h-9 rounded-xl ${themeClasses.secondary} ${themeClasses.text} flex items-center justify-center shrink-0 border ${themeClasses.border}`}>
-                                                    <History size={18} />
+                                                    <Trophy size={18} />
                                                 </div>
                                                 <div className="min-w-0">
                                                     <h3 className="font-bold text-[11px] text-slate-800 dark:text-white leading-tight truncate">{goal.title}</h3>
@@ -372,19 +413,19 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                             </div>
 
                                             <div className="pt-5 border-t border-slate-50 dark:border-slate-800/50 grid grid-cols-2 gap-3">
-                                                <button onClick={() => revisitGoal(goal)} className="flex items-center justify-center gap-2 py-3 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-indigo-500 rounded-xl transition-all">
+                                                <button type="button" onClick={(e) => revisitGoal(goal, e)} className="flex items-center justify-center gap-2 py-3 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-indigo-500 rounded-xl transition-all active:scale-[0.98]">
                                                     <RotateCcw size={12} />
                                                     <span className="text-[8px] font-black uppercase tracking-widest">REVISIT PATH</span>
                                                 </button>
-                                                <button onClick={() => extractRitualFromGoal(goal)} className="flex items-center justify-center gap-2 py-3 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-amber-500 rounded-xl transition-all">
+                                                <button type="button" onClick={(e) => extractRitualFromGoal(goal, e)} className="flex items-center justify-center gap-2 py-3 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-amber-500 rounded-xl transition-all active:scale-[0.98]">
                                                     <Zap size={12} />
                                                     <span className="text-[8px] font-black uppercase tracking-widest">EXTRACT RITUAL</span>
                                                 </button>
-                                                <button onClick={() => onReflectAction(goal.id)} className="flex items-center justify-center gap-2 py-3 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-indigo-500 rounded-xl transition-all">
+                                                <button type="button" onClick={(e) => onReflectAction(goal.id, e)} className="flex items-center justify-center gap-2 py-3 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-indigo-500 rounded-xl transition-all active:scale-[0.98]">
                                                     <BookOpen size={12} />
                                                     <span className="text-[8px] font-black uppercase tracking-widest">REFLECT AGAIN</span>
                                                 </button>
-                                                <button onClick={() => setExpandedGoalId(null)} className="flex items-center justify-center gap-2 py-3 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-slate-600 rounded-xl transition-all">
+                                                <button type="button" onClick={(e) => { e.stopPropagation(); setExpandedGoalId(null); }} className="flex items-center justify-center gap-2 py-3 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-slate-600 rounded-xl transition-all active:scale-[0.98]">
                                                     <Activity size={12} />
                                                     <span className="text-[8px] font-black uppercase tracking-widest">LET IT REST</span>
                                                 </button>
@@ -396,7 +437,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                         }
 
                         return (
-                            <div key={goal.id} className={`bg-white dark:bg-slate-900 rounded-[1.5rem] border transition-all overflow-hidden ${expandedGoalId === goal.id ? 'border-slate-200 dark:border-slate-700' : 'border-slate-50 dark:border-slate-800'}`}>
+                            <div key={goal.id} className={`bg-white dark:bg-slate-900 rounded-[1.5rem] border transition-all overflow-hidden ${expandedGoalId === goal.id ? 'border-slate-200 dark:border-slate-700 shadow-md' : 'border-slate-50 dark:border-slate-800 shadow-sm'}`}>
                                 <div 
                                     onClick={() => setExpandedGoalId(expandedGoalId === goal.id ? null : goal.id)} 
                                     className="p-4 flex items-center justify-between cursor-pointer"
@@ -458,12 +499,19 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                                     <div 
                                                         key={m.id} 
                                                         onClick={() => toggleMilestone(goal.id, m.id)}
-                                                        className="flex items-center gap-3 p-3 bg-slate-50/50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 active:scale-[0.98] transition-all"
+                                                        className="flex items-center gap-3 p-3 bg-slate-50/50 dark:bg-slate-800/40 rounded-xl border border-slate-100 dark:border-slate-800/50 hover:bg-slate-50 active:scale-[0.98] transition-all group/milestone"
                                                     >
                                                         <div className={`w-4 h-4 rounded-md border flex items-center justify-center transition-all ${m.completed ? 'bg-emerald-500 border-transparent text-white' : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-700'}`}>
                                                             {m.completed && <Check size={10} strokeWidth={4} />}
                                                         </div>
                                                         <span className={`text-[10px] font-bold leading-tight flex-1 ${m.completed ? 'line-through text-slate-300' : 'text-slate-600 dark:text-slate-300'}`}>{m.title}</span>
+                                                        <button 
+                                                            type="button"
+                                                            onClick={(e) => deleteMilestoneFromGoal(goal.id, m.id, e)}
+                                                            className="p-1.5 text-rose-300 hover:text-rose-500 hover:bg-rose-50 dark:hover:bg-rose-900/10 rounded-lg transition-all"
+                                                        >
+                                                            <X size={12} />
+                                                        </button>
                                                     </div>
                                                 ))}
                                             </div>
@@ -482,6 +530,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                                                         <Zap size={14} fill={isDone ? 'none' : 'currentColor'} />
                                                                     </div>
                                                                     <button 
+                                                                        type="button"
                                                                         onClick={(e) => { e.stopPropagation(); toggleHabitCompletion(h.id, today); }}
                                                                         className={`w-6 h-6 rounded-lg flex items-center justify-center transition-all ${isDone ? `${themeClasses.primary} text-white` : 'bg-slate-50 dark:bg-slate-800 text-slate-300'}`}
                                                                     >
@@ -499,7 +548,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                             ) : (
                                                 <div className="p-8 rounded-[1.5rem] border-2 border-dashed border-slate-100 dark:border-slate-800 flex flex-col items-center justify-center gap-2">
                                                     <p className="text-[10px] font-bold text-slate-400">No linked rituals found.</p>
-                                                    <button onClick={() => setView('dashboard')} className="text-[9px] font-black uppercase tracking-[0.2em] text-indigo-500 hover:text-indigo-600 transition-colors">LINK RITUAL</button>
+                                                    <button type="button" onClick={() => setView('dashboard')} className="text-[9px] font-black uppercase tracking-[0.2em] text-indigo-500 hover:text-indigo-600 transition-colors">LINK RITUAL</button>
                                                 </div>
                                             )}
                                         </div>
@@ -516,31 +565,41 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                                             </span>
                                                         </div>
                                                     ))}
-                                                    <button onClick={() => onReflectAction(goal.id)} className="w-full py-2 text-[8px] font-black uppercase text-indigo-500 tracking-widest">Reflect Again</button>
+                                                    <button type="button" onClick={(e) => onReflectAction(goal.id, e)} className="w-full py-2 text-[8px] font-black uppercase text-indigo-500 tracking-widest">Reflect Again</button>
                                                 </div>
                                             ) : (
                                                 <div className="p-8 rounded-[1.5rem] border-2 border-dashed border-slate-100 dark:border-slate-800 flex flex-col items-center justify-center gap-2">
                                                     <p className="text-[10px] font-bold text-slate-400">No narrative footprints found.</p>
-                                                    <button onClick={() => onReflectAction(goal.id)} className="text-[9px] font-black uppercase tracking-[0.2em] text-indigo-500 hover:text-indigo-600 transition-colors">REFLECT NOW</button>
+                                                    <button type="button" onClick={(e) => onReflectAction(goal.id, e)} className="text-[9px] font-black uppercase tracking-[0.2em] text-indigo-500 hover:text-indigo-600 transition-colors">REFLECT NOW</button>
                                                 </div>
                                             )}
                                         </div>
 
                                         <div className="pt-5 space-y-3 border-t border-slate-50 dark:border-slate-800/50">
                                             <div className="grid grid-cols-2 gap-3">
-                                                <button onClick={() => handleEditClick(goal)} className="flex items-center justify-center gap-2 py-3 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-slate-600 rounded-xl transition-all">
+                                                <button type="button" onClick={(e) => { e.stopPropagation(); handleEditClick(goal); }} className="flex items-center justify-center gap-2 py-3 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-slate-600 rounded-xl transition-all active:scale-[0.98]">
                                                     <Pencil size={12} />
                                                     <span className="text-[8px] font-black uppercase tracking-widest">REDESIGN</span>
                                                 </button>
-                                                <button onClick={() => updateGoal(goal.id, { isPaused: !goal.isPaused })} className={`flex items-center justify-center gap-2 py-3 rounded-xl transition-all ${goal.isPaused ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 dark:bg-slate-800 text-slate-400'}`}>
+                                                <button type="button" onClick={(e) => { e.stopPropagation(); updateGoal(goal.id, { isPaused: !goal.isPaused }); }} className={`flex items-center justify-center gap-2 py-3 rounded-xl transition-all active:scale-[0.98] ${goal.isPaused ? 'bg-amber-50 text-amber-500' : 'bg-slate-50 dark:bg-slate-800 text-slate-400'}`}>
                                                     {goal.isPaused ? <PlayCircle size={12} /> : <PauseCircle size={12} />}
                                                     <span className="text-[8px] font-black uppercase tracking-widest">{goal.isPaused ? 'RESUME' : 'PAUSE'}</span>
                                                 </button>
+                                                <button type="button" onClick={(e) => { e.stopPropagation(); setShowArchiveFlow(goal.id); }} className="flex items-center justify-center gap-2 py-3 bg-slate-50 dark:bg-slate-800 text-slate-400 hover:text-indigo-500 rounded-xl transition-all active:scale-[0.98]">
+                                                    <Archive size={12} />
+                                                    <span className="text-[8px] font-black uppercase tracking-widest">ARCHIVE</span>
+                                                </button>
+                                                <button 
+                                                    type="button" 
+                                                    onClick={(e) => handleDeleteGoalRequest(goal.id, e)} 
+                                                    className={`flex items-center justify-center gap-2 py-3 rounded-xl border transition-all active:scale-[0.98] ${confirmingDeleteId === goal.id ? 'bg-rose-500 text-white border-transparent shadow-lg' : 'bg-rose-50 dark:bg-rose-950/20 text-rose-400 hover:text-rose-600 border-rose-100 dark:border-rose-900/10'}`}
+                                                >
+                                                    {confirmingDeleteId === goal.id ? <AlertCircle size={12} /> : <Trash2 size={12} />}
+                                                    <span className="text-[8px] font-black uppercase tracking-widest">
+                                                        {confirmingDeleteId === goal.id ? 'SURE?' : 'DELETE'}
+                                                    </span>
+                                                </button>
                                             </div>
-                                            <button onClick={() => setShowArchiveFlow(goal.id)} className="w-full py-4 bg-rose-50 dark:bg-rose-950/20 text-rose-500 rounded-[1.25rem] flex items-center justify-center gap-2 border border-rose-100 dark:border-rose-900/10 transition-all active:scale-[0.98]">
-                                                <Archive size={14} />
-                                                <span className="text-[8px] font-black uppercase tracking-widest">ARCHIVE TO HALL</span>
-                                            </button>
                                         </div>
                                     </div>
                                 )}
@@ -554,7 +613,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
             {showArchiveFlow && (
                 <div className="fixed inset-0 z-[100] bg-slate-900/60 backdrop-blur-md flex items-center justify-center p-6 animate-in fade-in">
                     <div className="bg-white dark:bg-slate-900 w-full max-sm rounded-[2.5rem] p-8 shadow-2xl border border-slate-100 dark:border-slate-800 relative animate-in zoom-in-95">
-                        <button onClick={() => setShowArchiveFlow(null)} className="absolute top-6 right-6 p-1 text-slate-300 hover:text-slate-500"><X size={18}/></button>
+                        <button type="button" onClick={() => setShowArchiveFlow(null)} className="absolute top-6 right-6 p-1 text-slate-300 hover:text-slate-500"><X size={18}/></button>
                         <div className="text-center mb-8">
                             <h2 className="text-lg font-black text-slate-800 dark:text-white tracking-tight">Seal Your Journey</h2>
                             <p className="text-[7px] font-black uppercase tracking-[0.2em] text-slate-400 mt-1">Growth transforms, never disappears.</p>
@@ -567,6 +626,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                     {(['Integrated', 'Evolved', 'Paused with Insight', 'Completed', 'Redirected'] as GoalOutcome[]).map(outcome => (
                                         <button 
                                             key={outcome}
+                                            type="button"
                                             onClick={() => setArchiveOutcome(outcome)}
                                             className={`px-2 py-3 rounded-xl text-[7px] font-black uppercase tracking-widest border transition-all ${archiveOutcome === outcome ? `${themeClasses.primary} text-white border-transparent shadow-md` : 'bg-slate-50 dark:bg-slate-800 text-slate-400 border-slate-100 dark:border-slate-800'}`}
                                         >
@@ -606,7 +666,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
                                 </div>
                              </div>
 
-                             <button onClick={finalizeArchive} className={`w-full py-4 rounded-xl font-black text-[9px] uppercase tracking-widest text-white shadow-lg bg-gradient-to-br ${themeClasses.gradient} mt-4`}>
+                             <button type="button" onClick={finalizeArchive} className={`w-full py-4 rounded-xl font-black text-[9px] uppercase tracking-widest text-white shadow-lg bg-gradient-to-br ${themeClasses.gradient} mt-4`}>
                                 INTEGRATE TO JOURNEY
                              </button>
                         </div>
@@ -617,7 +677,7 @@ export const Goals: React.FC<GoalsProps> = ({ setView }) => {
             {showModal && (
                 <div className="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in">
                     <div className="bg-white dark:bg-slate-900 w-full max-w-md rounded-[2.5rem] p-8 shadow-2xl border border-slate-100 dark:border-slate-800 relative animate-in zoom-in-95 overflow-hidden flex flex-col max-h-[85vh]">
-                        <button onClick={resetForm} className="absolute top-6 right-6 p-1.5 text-slate-300 hover:text-slate-500 transition-colors z-10"><X size={20}/></button>
+                        <button type="button" onClick={resetForm} className="absolute top-6 right-6 p-1.5 text-slate-300 hover:text-slate-500 transition-colors z-10"><X size={20}/></button>
                         
                         <div className="mb-8">
                             <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter">{editingGoalId ? 'Refine Path' : 'New Horizon'}</h2>

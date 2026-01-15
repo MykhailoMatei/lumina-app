@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useApp } from './context/AppContext';
 import { AppProvider } from './context/AppContext';
 import { Dashboard } from './pages/Dashboard';
@@ -12,8 +12,17 @@ import { SecurityLock } from './components/SecurityLock';
 import { NotificationSystem } from './components/NotificationSystem';
 
 const AppContent: React.FC = () => {
-  const { isLocked, circadian } = useApp();
+  const { isLocked, circadian, theme } = useApp();
   const [view, setView] = useState('dashboard');
+
+  // Synchronize theme state with document class for Tailwind dark mode
+  useEffect(() => {
+    if (theme === 'dark') {
+      document.documentElement.classList.add('dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+    }
+  }, [theme]);
 
   if (isLocked) {
       return <SecurityLock />;
@@ -28,7 +37,7 @@ const AppContent: React.FC = () => {
       case 'journal':
         return <Journal />;
       case 'insights':
-        return <Insights />;
+        return <Insights setView={setView} />;
       case 'profile':
         return <Profile />;
       default:

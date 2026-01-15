@@ -27,7 +27,6 @@ export interface Goal {
   completed: boolean;
   milestones: Milestone[];
   isPaused?: boolean;
-  // Hall of Progress / Journey Fields
   outcomeLabel?: GoalOutcome;
   identityImpact?: string;
   whatStayed?: string;
@@ -61,7 +60,7 @@ export interface JournalEntry {
   aiInsight?: string;
   linkedGoalId?: string; 
   linkedHabitId?: string;
-  imageData?: string; // Base64 image data
+  imageData?: string; 
   lastUpdated?: number;
 }
 
@@ -81,68 +80,6 @@ export interface AppNotification {
   type: 'achievement' | 'motivation' | 'reminder';
   title: string;
   message: string;
-}
-
-export interface Post {
-  id: string;
-  author: string;
-  avatar: string;
-  category: string;
-  title: string;
-  content: string;
-  likes: number;
-  likedBy: string[];
-  comments: Comment[];
-  timestamp: string;
-  type: 'discussion' | 'question' | 'share';
-}
-
-export interface Comment {
-  id: string;
-  author: string;
-  avatar: string;
-  content: string;
-  timestamp: string;
-  isExpert?: boolean;
-}
-
-export interface Resource {
-  id: string;
-  title: string;
-  author: string;
-  category: string;
-  image: string;
-  type: 'video' | 'podcast' | 'article';
-  duration: string;
-  rating: number;
-}
-
-export interface LearningModule {
-  id: string;
-  title: string;
-  description: string;
-  image: string;
-  completedLessons: number;
-  totalLessons: number;
-}
-
-export interface Quiz {
-  id: string;
-  title: string;
-  description: string;
-  image: string;
-  questionsCount: number;
-}
-
-export interface AppEvent {
-  id: string;
-  title: string;
-  description: string;
-  image: string;
-  date: string;
-  participants: number;
-  type: string;
-  joined: boolean;
 }
 
 export interface UserState {
@@ -171,6 +108,11 @@ export interface UserState {
   };
   notificationSettings: {
     enabled: boolean;
+    routineTimeline: {
+      Morning: string;   // "HH:MM"
+      Afternoon: string; // "HH:MM"
+      Evening: string;   // "HH:MM"
+    };
     types: {
       habits: boolean;
       goals: boolean;
@@ -191,3 +133,11 @@ export interface UserState {
     remoteUrl?: string;
   };
 }
+
+// Rest of types kept for consistency
+export interface Post { id: string; author: string; avatar: string; category: string; title: string; content: string; likes: number; likedBy: string[]; comments: Comment[]; timestamp: string; type: 'discussion' | 'question' | 'share'; }
+export interface Comment { id: string; author: string; avatar: string; content: string; timestamp: string; isExpert?: boolean; }
+export interface Resource { id: string; title: string; author: string; category: string; image: string; type: 'video' | 'podcast' | 'article'; duration: string; rating: number; }
+export interface LearningModule { id: string; title: string; description: string; image: string; completedLessons: number; totalLessons: number; }
+export interface Quiz { id: string; title: string; description: string; image: string; questionsCount: number; }
+export interface AppEvent { id: string; title: string; description: string; image: string; date: string; participants: number; type: string; joined: boolean; }

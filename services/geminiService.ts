@@ -1,4 +1,5 @@
-import { GoogleGenAI, Type } from "@google/genai";
+
+import { GoogleGenAI, Type, GenerateContentResponse } from "@google/genai";
 import { Goal, AppLanguage, Habit, JournalEntry, DailyBriefing } from "../types";
 
 const getAiClient = () => {
@@ -10,12 +11,67 @@ const getAiClient = () => {
 const getLangInstr = (lang: AppLanguage) => 
   `CRITICAL: Response MUST be strictly in ${lang}. Output ONLY valid JSON.`;
 
+const GET_DAILY_FALLBACK = (lang: AppLanguage): DailyBriefing => {
+  const now = new Date();
+  const start = new Date(now.getFullYear(), 0, 0);
+  const diff = now.getTime() - start.getTime();
+  const oneDay = 1000 * 60 * 60 * 24;
+  const dayOfYear = Math.floor(diff / oneDay);
+
+  const fallbacks: DailyBriefing[] = [
+    {
+      motivation: "The path to mastery is built one ritual at a time.",
+      focus: "Identity Shift",
+      tip: "Drink a glass of water before your first habit.",
+      journalPrompt: "Who are you becoming through your current discipline?",
+      priorityTask: "Review your active growth map."
+    },
+    {
+      motivation: "Small wins are the compound interest of self-improvement.",
+      focus: "Atomic Momentum",
+      tip: "Set out your clothes for tomorrow tonight.",
+      journalPrompt: "What is one thing you can forgive yourself for today?",
+      priorityTask: "Complete your most difficult ritual first."
+    }
+  ];
+  return fallbacks[dayOfYear % fallbacks.length];
+};
+
 export const testApiConnection = async () => {
   try {
     const ai = getAiClient();
-    const res = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: "Reply 'OK'." });
-    return { success: !!res.text, message: "AI Connection verified!" };
+    const response: GenerateContentResponse = await ai.models.generateContent({ 
+      model: 'gemini-3-flash-preview', 
+      contents: "Reply 'OK'." 
+    });
+    return { success: !!response.text, message: "AI Connection verified!" };
   } catch (e: any) { return { success: false, message: e.message }; }
+};
+
+export const generateDailyBriefing = async (name: string, goals: Goal[], habits: Habit[], recentJournal: JournalEntry[], lang: AppLanguage): Promise<DailyBriefing> => {
+  const ai = getAiClient();
+  const dateStr = new Date().toDateString();
+  const context = `Today: ${dateStr}. Goals: ${goals.map(g => g.title).join(', ')}. Habits: ${habits.map(h => h.title).join(', ')}. Recent mood: ${recentJournal[0]?.mood || 'N/A'}`;
+  
+  const prompt = `${getLangInstr(lang)} Generate a daily briefing. JSON: { motivation, focus, tip, journal_prompt, priorityTask }. Context: ${context}`;
+
+  try {
+    const response: GenerateContentResponse = await ai.models.generateContent({
+      model: 'gemini-3-flash-preview',
+      contents: prompt,
+      config: { responseMimeType: "application/json" }
+    });
+    const data = JSON.parse(response.text || "{}");
+    return {
+      motivation: data.motivation || "Your potential is a series of choices.",
+      focus: data.focus || "Daily Evolution",
+      tip: data.tip || "Breathe intentionally.",
+      journalPrompt: data.journal_prompt || "What are you grateful for?",
+      priorityTask: data.priorityTask || "Advance your primary path."
+    };
+  } catch (err) {
+    return GET_DAILY_FALLBACK(lang);
+  }
 };
 
 export const generateGrowthAudit = async (
@@ -23,229 +79,131 @@ export const generateGrowthAudit = async (
     goals: Goal[], 
     journal: JournalEntry[], 
     lang: AppLanguage
-): Promise<{ summary: string, correlation: string, advice: string, trajectory: string }> => {
+): Promise<{ 
+  summary: string, 
+  correlation: string, 
+  advice: string, 
+  trajectory: string,
+  happinessTrigger: string,
+  mentalThemes: string[],
+  identityScores: { subject: string, A: number, fullMark: number }[],
+  archetype: string,
+  isCalibrating: boolean
+}> => {
     const ai = getAiClient();
+    const isEarlyStage = goals.length <= 1 && habits.length === 0 && journal.length === 0;
+    
+    const habitData = habits.length > 0 ? habits.map(h => `${h.title} (Streak: ${h.streak})`).join(', ') : "None tracked yet";
+    const journalData = journal.length > 0 ? journal.slice(0, 10).map(j => `[Mood: ${j.mood}] ${j.content.substring(0, 100)}`).join('; ') : "None written yet";
+    
     const context = `
-    Date: ${new Date().toDateString()}
-    Habits: ${habits.map(h => `${h.title} (Time: ${h.timeOfDay}, Streak: ${h.streak})`).join(', ')}
-    Recent Moods (Last 7 days): ${journal.slice(0, 7).map(j => `${j.date}: ${j.mood}`).join('; ')}
-    Active Goals: ${goals.filter(g => !g.completed).map(g => `${g.title} (${g.progress}%)`).join(', ')}
+    PHASE: ${isEarlyStage ? 'SEEDING_PHASE (User just started)' : 'ACTIVE_GROWTH'}
+    Habits: ${habitData}
+    Journal Context: ${journalData}
+    Goals: ${goals.map(g => `${g.title} (${g.category})`).join(', ')}
     `;
 
-    const prompt = `${getLangInstr(lang)} You are a High-Performance Growth Coach. Analyze the user's habit/mood correlation and circadian patterns.
-    JSON structure:
-    - summary: A punchy, 1-sentence executive summary of their current growth state.
-    - correlation: A specific causal link you found (e.g., "Mood peaks significantly when 'Morning' rituals are finished").
-    - advice: One biological or strategic adjustment (e.g., "Shift your hardest habit to your 10 AM power window").
-    - trajectory: A 30-day prediction based on current momentum.
+    const prompt = `${getLangInstr(lang)} Analyze growth data. 
+    
+    CRITICAL TONE GUIDE:
+    - If user is in SEEDING_PHASE, be encouraging and use simple metaphors (e.g., 'Seeds of Intent', 'First Horizon').
+    - AVOID technical jargon like 'Unidirectional Planning', 'Objective Simplification', or 'Input-Output Disparity' for new users.
+    - Use human, warm coaching language.
+    
+    archetype: A persona (e.g. 'The Visionary Beginner', 'The Disciplined Architect').
+    MANDATORY JSON:
+    - summary: Warm overview of their current state.
+    - correlation: How their goals match their actions.
+    - advice: One actionable next step.
+    - trajectory: Future outlook.
+    - archetype: string
+    - happinessTrigger: A psychological "win".
+    - mentalThemes: Array of 3 human-friendly themes (e.g. 'Foundational Courage', 'Fresh Perspective').
+    - identityScores: Array of 6 objects { subject: string, A: number, fullMark: 100 }.
+    - isCalibrating: true if low data, false otherwise.
+
     Context: ${context}`;
 
     try {
-        const res = await ai.models.generateContent({
+        const res: GenerateContentResponse = await ai.models.generateContent({
             model: 'gemini-3-flash-preview',
             contents: prompt,
-            config: { 
-                responseMimeType: "application/json",
-                responseSchema: {
-                    type: Type.OBJECT,
-                    properties: {
-                        summary: { type: Type.STRING },
-                        correlation: { type: Type.STRING },
-                        advice: { type: Type.STRING },
-                        trajectory: { type: Type.STRING }
-                    },
-                    required: ["summary", "correlation", "advice", "trajectory"]
-                }
-            }
+            config: { responseMimeType: "application/json" }
         });
-        return JSON.parse(res.text || "{}");
+        const parsed = JSON.parse(res.text || "{}");
+        return {
+            summary: parsed.summary || "You've planted your first seed.",
+            correlation: parsed.correlation || "Beginning to map your intentions.",
+            advice: parsed.advice || "Start a daily ritual to build momentum.",
+            trajectory: parsed.trajectory || "Positive foundation.",
+            archetype: parsed.archetype || "Growth Traveler",
+            happinessTrigger: parsed.happinessTrigger || "Taking the first step is the hardest part.",
+            mentalThemes: parsed.mentalThemes || ["Fresh Start", "Initial Vision", "Courage"],
+            identityScores: parsed.identityScores || [
+              { subject: 'Health', A: 30, fullMark: 100 },
+              { subject: 'Career', A: 30, fullMark: 100 },
+              { subject: 'Creativity', A: 30, fullMark: 100 },
+              { subject: 'Learning', A: 30, fullMark: 100 },
+              { subject: 'Personal', A: 30, fullMark: 100 },
+              { subject: 'Financial', A: 30, fullMark: 100 }
+            ],
+            isCalibrating: parsed.isCalibrating ?? isEarlyStage
+        };
     } catch {
         return { 
-            summary: "You are maintaining steady momentum.", 
-            correlation: "Consistency is building a foundation for growth.", 
-            advice: "Stay the course and prioritize rest.",
-            trajectory: "Sustainable growth expected over the next month."
+            summary: "Maintaining steady momentum.", 
+            correlation: "Building a foundation.", 
+            advice: "Stay the course.",
+            trajectory: "Sustainable growth.",
+            archetype: "Growth Traveler",
+            happinessTrigger: "Your presence is your anchor.",
+            mentalThemes: ["Persistence", "Stability", "Vision"],
+            identityScores: [
+              { subject: 'Health', A: 50, fullMark: 100 },
+              { subject: 'Career', A: 50, fullMark: 100 },
+              { subject: 'Creativity', A: 50, fullMark: 100 },
+              { subject: 'Learning', A: 50, fullMark: 100 },
+              { subject: 'Personal', A: 50, fullMark: 100 },
+              { subject: 'Financial', A: 50, fullMark: 100 }
+            ],
+            isCalibrating: isEarlyStage
         };
     }
 };
 
-export const suggestAtomicHabit = async (habitTitle: string, lang: AppLanguage): Promise<{ suggestion: string, reason: string }> => {
+export const suggestAtomicHabit = async (habitTitle: string, lang: AppLanguage) => {
   const ai = getAiClient();
-  const prompt = `${getLangInstr(lang)} The user wants to start this habit: "${habitTitle}". 
-  Based on Atomic Habits science, suggest a "tiny" version (less than 2 mins) that is impossible to fail.
-  JSON structure:
-  - suggestion: The tiny habit version.
-  - reason: Why this works (1 short sentence).`;
-
+  const prompt = `${getLangInstr(lang)} Tiny habit for: "${habitTitle}". JSON: { suggestion, reason }.`;
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompt,
-      config: { 
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            suggestion: { type: Type.STRING },
-            reason: { type: Type.STRING }
-          },
-          required: ["suggestion", "reason"]
-        }
-      }
-    });
-    return JSON.parse(response.text || "{}");
-  } catch {
-    return { suggestion: habitTitle, reason: "Start where you are." };
-  }
+    const res = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt, config: { responseMimeType: "application/json" } });
+    return JSON.parse(res.text || "{}");
+  } catch { return { suggestion: habitTitle, reason: "Start small." }; }
 };
 
-export const generateDailyBriefing = async (name: string, goals: Goal[], habits: Habit[], recentJournal: JournalEntry[], lang: AppLanguage): Promise<DailyBriefing> => {
+export const generateMilestonesForGoal = async (goalTitle: string, lang: AppLanguage) => {
   const ai = getAiClient();
-  const context = `Today's Date: ${new Date().toDateString()}. User: ${name}. Goals: ${goals.map(g => g.title).join(', ')}. Habits: ${habits.map(h => h.title).join(', ')}. Recent mood: ${recentJournal[0]?.mood || 'N/A'}`;
-  const prompt = `${getLangInstr(lang)} Generate a high-performance daily briefing. Ensure the advice is unique for ${new Date().toDateString()}.
-  JSON structure:
-  - motivation: One powerful mantra for growth.
-  - focus: One specific theme for the day.
-  - tip: One micro-action the user can do in 2 minutes.
-  - journal_prompt: A deep, Socratic question that bridges their goals and their emotional state.
-  - priorityTask: Identify the SINGLE most critical milestone or habit the user should execute today to maintain momentum.
-  Context: ${context}`;
-
+  const prompt = `${getLangInstr(lang)} 5 milestones for "${goalTitle}". JSON array of strings.`;
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-pro-preview',
-      contents: prompt,
-      config: { 
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            motivation: { type: Type.STRING },
-            focus: { type: Type.STRING },
-            tip: { type: Type.STRING },
-            journal_prompt: { type: Type.STRING },
-            priorityTask: { type: Type.STRING }
-          },
-          required: ["motivation", "focus", "tip", "journal_prompt", "priorityTask"]
-        }
-      }
-    });
-    
-    const data = JSON.parse(response.text || "{}");
-    return {
-      motivation: data.motivation || "Consistency is your superpower.",
-      focus: data.focus || "Growth",
-      tip: data.tip || "Start small.",
-      journalPrompt: data.journal_prompt || "What are you grateful for today?",
-      priorityTask: data.priorityTask || "Review your goals."
-    };
-  } catch {
-    return { motivation: "Consistency is your superpower.", focus: "Momentum", tip: "Start small.", journalPrompt: "What is the smallest step you can take today toward your biggest goal?", priorityTask: "Complete your main ritual." };
-  }
-};
-
-export const generateMilestonesForGoal = async (goalTitle: string, lang: AppLanguage): Promise<string[]> => {
-  const ai = getAiClient();
-  const prompt = `${getLangInstr(lang)} Break the goal "${goalTitle}" into 5 highly actionable, sequential milestones. Return a JSON array of strings.`;
-  try {
-    const res = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompt,
-      config: { 
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.ARRAY,
-          items: { type: Type.STRING }
-        }
-      }
-    });
+    const res = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt, config: { responseMimeType: "application/json" } });
     return JSON.parse(res.text || "[]");
   } catch { return []; }
 };
 
-export const translateContent = async (title: string, content: string, lang: AppLanguage): Promise<{ title: string, content: string }> => {
+export const translateContent = async (title: string, content: string, lang: AppLanguage) => {
   const ai = getAiClient();
-  const prompt = `Translate the following community post to ${lang}. 
-  Return a JSON object with "title" and "content" fields.
-  Title: ${title}
-  Content: ${content}`;
-
+  const prompt = `Translate to ${lang}. JSON {title, content}. Title: ${title} Content: ${content}`;
   try {
-    const response = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: prompt,
-      config: { 
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            title: { type: Type.STRING },
-            content: { type: Type.STRING }
-          },
-          required: ["title", "content"]
-        }
-      }
-    });
-    return JSON.parse(response.text || "{}");
-  } catch (err) {
-    console.error(err);
-    return { title, content };
-  }
+    const res = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt, config: { responseMimeType: "application/json" } });
+    return JSON.parse(res.text || "{}");
+  } catch { return { title, content }; }
 };
 
-export const generateEntryInsight = async (
-  content: string, 
-  mood: string, 
-  goalTitle: string | null, 
-  habitTitle: string | null,
-  imageData: string | null, 
-  lang: AppLanguage
-): Promise<string> => {
+export const generateEntryInsight = async (content: string, mood: string, goalTitle: string | null, habitTitle: string | null, imageData: string | null, lang: AppLanguage) => {
   const ai = getAiClient();
-  
-  const textPart = {
-    text: `${getLangInstr(lang)} Provide a deep, coaching-style insight (1-2 sentences) for this journal entry.
-    Context:
-    - User content: "${content}"
-    - Mood: ${mood}
-    ${goalTitle ? `- Linked Goal: "${goalTitle}"` : ""}
-    ${habitTitle ? `- Linked Habit: "${habitTitle}"` : ""}
-    ${imageData ? "- An image was attached. Analyze the text and image context together." : ""}
-    JSON: { "insight": "..." }`
-  };
-
-  const parts: any[] = [textPart];
-  
-  if (imageData) {
-    const base64Data = imageData.split(',')[1];
-    const mimeType = imageData.split(';')[0].split(':')[1];
-    parts.push({
-      inlineData: {
-        data: base64Data,
-        mimeType: mimeType
-      }
-    });
-  }
-
+  const parts: any[] = [{ text: `${getLangInstr(lang)} Coaching insight. JSON: { insight } Content: ${content}` }];
+  if (imageData) parts.push({ inlineData: { data: imageData.split(',')[1], mimeType: imageData.split(';')[0].split(':')[1] } });
   try {
-    const res = await ai.models.generateContent({
-      model: 'gemini-3-flash-preview',
-      contents: { parts },
-      config: { 
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            insight: { type: Type.STRING }
-          },
-          required: ["insight"]
-        }
-      }
-    });
-    const parsed = JSON.parse(res.text || "{}");
-    return parsed.insight || "";
-  } catch (err) { 
-    console.error(err);
-    return "Reflecting on your journey is the first step toward mastery."; 
-  }
+    const res = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: { parts }, config: { responseMimeType: "application/json" } });
+    return JSON.parse(res.text || "{}").insight || " মাস্টারি বা দক্ষতা অর্জনের দিকে প্রতিফলন প্রথম পদক্ষেপ।";
+  } catch { return "Reflecting on your journey is the first step toward mastery."; }
 };

@@ -2,7 +2,7 @@
 import React, { useState } from 'react';
 import { useApp } from '../context/AppContext';
 import { supabase } from '../services/supabaseClient';
-import { X, Mail, Lock, Loader2, Sparkles, ArrowRight, Github, ShieldCheck, Chrome } from 'lucide-react';
+import { X, Mail, Lock, Loader2, ShieldCheck, Chrome, Info } from 'lucide-react';
 
 interface AuthModalProps {
     onClose: () => void;
@@ -12,8 +12,10 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
     const { themeClasses, t, triggerNotification } = useApp();
     const [isSignUp, setIsSignUp] = useState(false);
     const [loading, setLoading] = useState(false);
+    const [googleLoading, setGoogleLoading] = useState(false);
     const [email, setEmail] = useState('');
     const [password, setPassword] = useState('');
+    const [showHelp, setShowHelp] = useState(false);
 
     const handleAuth = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -31,94 +33,133 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                 onClose();
             }
         } catch (error: any) {
-            triggerNotification(t('auth_error'), error.message, 'reminder');
+            triggerNotification(t('auth_error'), error.message || 'Authentication failed', 'reminder');
         } finally {
             setLoading(false);
         }
     };
 
     const handleGoogleLogin = async () => {
+        setGoogleLoading(true);
         try {
+            // Using window.location.origin ensures we return to the root of the app
+            const redirectTo = window.location.origin;
+            
+            console.group('Lumina Auth Debug');
+            console.log('Target Redirect (Site URL):', redirectTo);
+            console.log('Google Callback (GCP Console): https://woxthjwqqlpmnlqtpced.supabase.co/auth/v1/callback');
+            console.groupEnd();
+
             const { error } = await supabase.auth.signInWithOAuth({
                 provider: 'google',
                 options: {
-                    redirectTo: window.location.origin
+                    redirectTo: redirectTo,
+                    queryParams: {
+                        access_type: 'offline',
+                        prompt: 'select_account',
+                    },
                 }
             });
+            
             if (error) throw error;
+            
         } catch (error: any) {
-            triggerNotification(t('auth_error'), error.message, 'reminder');
+            console.error('Google Auth Error:', error);
+            triggerNotification(
+                t('auth_error'), 
+                error.message === 'provider_not_supported' 
+                    ? 'Google login is not enabled in Supabase' 
+                    : error.message || 'Google login failed', 
+                'reminder'
+            );
+            setGoogleLoading(false);
         }
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-end justify-center animate-in fade-in duration-300">
+        <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 animate-in fade-in duration-300">
             {/* Overlay */}
-            <div className="absolute inset-0 bg-slate-950/40 backdrop-blur-md" onClick={onClose} />
+            <div className="absolute inset-0 bg-slate-950/60 backdrop-blur-md" onClick={onClose} />
             
-            {/* Immersive Bottom Sheet */}
-            <div className="bg-white dark:bg-slate-900 w-full max-w-lg rounded-t-[3rem] p-8 pb-12 shadow-2xl relative animate-in slide-in-from-bottom-full duration-500 border-t border-white/10 overflow-hidden">
-                {/* Drag Handle Decoration */}
-                <div className="absolute top-3 left-1/2 -translate-x-1/2 w-12 h-1.5 bg-slate-200 dark:bg-slate-800 rounded-full" />
+            {/* Centered Modal - Compact & Premium */}
+            <div className="bg-white dark:bg-slate-900 w-full max-w-[340px] rounded-[2.5rem] p-7 shadow-2xl relative animate-in zoom-in-95 duration-300 border border-slate-100 dark:border-slate-800 overflow-hidden">
+                <div className={`absolute top-0 right-0 w-32 h-32 ${themeClasses.primary} opacity-5 rounded-full blur-3xl -mr-16 -mt-16`} />
                 
-                <div className={`absolute top-0 right-0 w-48 h-48 ${themeClasses.primary} opacity-5 rounded-full blur-3xl -mr-24 -mt-24`} />
-                
-                <div className="flex justify-between items-start mb-8 pt-2">
-                    <div className="space-y-1">
-                        <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tight">
-                            {isSignUp ? 'Claim Your Map' : 'Welcome Home'}
+                <div className="flex justify-between items-start mb-5 pt-1">
+                    <div className="space-y-0.5">
+                        <h2 className="text-xl font-black text-slate-800 dark:text-white tracking-tight">
+                            {isSignUp ? 'Claim Map' : 'Welcome'}
                         </h2>
-                        <p className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-                            {isSignUp ? 'Establish your private growth vault' : 'Resume your personal evolution'}
+                        <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest">
+                            {isSignUp ? 'Join the vault' : 'Resume evolution'}
                         </p>
                     </div>
-                    <button onClick={onClose} className="p-2 bg-slate-50 dark:bg-slate-800 rounded-full text-slate-300 hover:text-slate-500 transition-colors shadow-sm">
-                        <X size={20} />
+                    <button onClick={onClose} className="p-1.5 bg-slate-50 dark:bg-slate-800 rounded-full text-slate-300 hover:text-slate-500 transition-colors">
+                        <X size={16} />
                     </button>
                 </div>
 
                 {/* Social Login Section */}
-                <div className="space-y-3 mb-8">
+                <div className="space-y-2 mb-6">
                     <button 
                         onClick={handleGoogleLogin}
-                        className="w-full flex items-center justify-center gap-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 py-4 rounded-2xl shadow-sm active:scale-[0.98] transition-all hover:bg-slate-50"
+                        disabled={googleLoading}
+                        className="w-full flex items-center justify-center gap-3 bg-white dark:bg-slate-800 border border-slate-100 dark:border-slate-700 py-2.5 rounded-xl shadow-sm active:scale-[0.98] transition-all hover:bg-slate-50 disabled:opacity-50"
                     >
-                        <Chrome size={18} className="text-slate-700 dark:text-white" />
-                        <span className="text-[11px] font-black uppercase tracking-widest text-slate-700 dark:text-white">Continue with Google</span>
+                        {googleLoading ? (
+                            <Loader2 size={14} className="animate-spin text-slate-400" />
+                        ) : (
+                            <Chrome size={14} className="text-slate-700 dark:text-white" />
+                        )}
+                        <span className="text-[9px] font-black uppercase tracking-widest text-slate-700 dark:text-white">
+                            {googleLoading ? 'Connecting...' : 'Google Login'}
+                        </span>
                     </button>
+
+                    <button 
+                        onClick={() => setShowHelp(!showHelp)}
+                        className="w-full text-center text-[7px] font-black uppercase tracking-widest text-slate-300 hover:text-slate-400 flex items-center justify-center gap-1 mt-1 transition-colors"
+                    >
+                        <Info size={10} /> Login issues?
+                    </button>
+
+                    {showHelp && (
+                        <div className="mt-2 p-3 bg-slate-50 dark:bg-slate-800/50 rounded-xl text-[7px] font-bold text-slate-500 dark:text-slate-400 space-y-2 animate-in slide-in-from-top-2">
+                            <p>1. Ensure <b>Google Provider</b> is enabled in Supabase Auth Dashboard.</p>
+                            <p>2. Set GCP Redirect URI to the Supabase callback URL.</p>
+                            <p>3. Add <b>{window.location.origin}</b> to Supabase <span className="text-indigo-500">Redirect URLs</span>.</p>
+                        </div>
+                    )}
                     
-                    <div className="flex items-center gap-4 py-2">
+                    <div className="flex items-center gap-3 py-2 mt-2">
                         <div className="h-px flex-1 bg-slate-100 dark:bg-slate-800" />
-                        <span className="text-[8px] font-black uppercase tracking-widest text-slate-300">Or use email</span>
+                        <span className="text-[7px] font-black uppercase tracking-widest text-slate-300">Or email</span>
                         <div className="h-px flex-1 bg-slate-100 dark:bg-slate-800" />
                     </div>
                 </div>
 
-                <form onSubmit={handleAuth} className="space-y-5">
-                    <div className="space-y-2">
+                <form onSubmit={handleAuth} className="space-y-3.5">
+                    <div className="space-y-2.5">
                         <div className="relative group">
-                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors" size={16} />
+                            <Mail className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors" size={13} />
                             <input 
                                 type="email"
                                 required
                                 value={email}
                                 onChange={e => setEmail(e.target.value)}
-                                className="w-full bg-slate-50 dark:bg-slate-800 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold border border-transparent focus:border-indigo-500/30 outline-none dark:text-white transition-all"
-                                placeholder="name@domain.com"
+                                className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold border border-transparent focus:border-indigo-500/30 outline-none dark:text-white transition-all"
+                                placeholder="Email"
                             />
                         </div>
-                    </div>
-
-                    <div className="space-y-2">
                         <div className="relative group">
-                            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors" size={16} />
+                            <Lock className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 group-focus-within:text-indigo-500 transition-colors" size={13} />
                             <input 
                                 type="password"
                                 required
                                 value={password}
                                 onChange={e => setPassword(e.target.value)}
-                                className="w-full bg-slate-50 dark:bg-slate-800 rounded-2xl pl-12 pr-4 py-4 text-sm font-bold border border-transparent focus:border-indigo-500/30 outline-none dark:text-white transition-all"
-                                placeholder="••••••••"
+                                className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl pl-10 pr-4 py-2.5 text-xs font-bold border border-transparent focus:border-indigo-500/30 outline-none dark:text-white transition-all"
+                                placeholder="Password"
                             />
                         </div>
                     </div>
@@ -126,25 +167,25 @@ export const AuthModal: React.FC<AuthModalProps> = ({ onClose }) => {
                     <button 
                         type="submit"
                         disabled={loading}
-                        className={`w-full py-5 rounded-[2rem] bg-gradient-to-br ${themeClasses.gradient} text-white font-black text-[10px] uppercase tracking-widest shadow-2xl flex items-center justify-center gap-3 active:scale-[0.98] transition-all disabled:opacity-50 mt-4`}
+                        className={`w-full py-3 rounded-2xl bg-gradient-to-br ${themeClasses.gradient} text-white font-black text-[9px] uppercase tracking-widest shadow-xl flex items-center justify-center gap-2 active:scale-[0.98] transition-all disabled:opacity-50 mt-2`}
                     >
-                        {loading ? <Loader2 size={16} className="animate-spin" /> : <ShieldCheck size={16} strokeWidth={3} />}
-                        {isSignUp ? 'Create Growth Vault' : 'Secure Entry'}
+                        {loading ? <Loader2 size={13} className="animate-spin" /> : <ShieldCheck size={13} strokeWidth={3} />}
+                        {isSignUp ? 'Create Vault' : 'Secure Entry'}
                     </button>
                 </form>
 
-                <div className="mt-10 text-center">
+                <div className="mt-5 text-center">
                     <button 
                         onClick={() => setIsSignUp(!isSignUp)}
-                        className={`text-[10px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-all flex items-center justify-center gap-2 mx-auto`}
+                        className={`text-[8px] font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 dark:hover:text-slate-200 transition-all flex flex-col items-center gap-1 mx-auto`}
                     >
-                        {isSignUp ? 'Existing Traveler?' : 'New to Lumina?'} 
-                        <span className={themeClasses.text}>{isSignUp ? 'Sign In' : 'Join the Collective'}</span>
+                        <span>{isSignUp ? 'Existing Traveler?' : 'New to Lumina?'}</span>
+                        <span className={themeClasses.text}>{isSignUp ? 'Sign In Instead' : 'Join the Collective'}</span>
                     </button>
                 </div>
 
-                <div className="mt-8 flex items-center justify-center gap-2 text-[8px] font-black uppercase tracking-[0.2em] text-slate-300">
-                    <Lock size={10} /> 256-Bit Personal Encryption Active
+                <div className="mt-5 flex items-center justify-center gap-1.5 text-[6px] font-black uppercase tracking-[0.2em] text-slate-200">
+                    <Lock size={7} /> 256-Bit Encryption
                 </div>
             </div>
         </div>

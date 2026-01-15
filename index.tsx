@@ -1,6 +1,18 @@
+
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
+
+// Register Service Worker for Mobile Notifications
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').then(registration => {
+      console.log('Lumina SW registered: ', registration.scope);
+    }).catch(registrationError => {
+      console.log('Lumina SW registration failed: ', registrationError);
+    });
+  });
+}
 
 const rootElement = document.getElementById('root');
 if (!rootElement) {

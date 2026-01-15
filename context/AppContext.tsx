@@ -6,8 +6,9 @@ import {
 } from '../types';
 import { performCloudSync } from '../services/syncService';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
+import { sendSystemNotification, requestNotificationPermission } from '../services/notificationService';
 
-export const APP_VERSION = '1.4.2-sync-delete-core';
+export const APP_VERSION = '1.5.0-routine-timeline';
 
 export const THEMES: Record<ThemeColor, any> = {
   indigo: { name: 'accent_indigo', primary: 'bg-indigo-600', text: 'text-indigo-600', secondary: 'bg-indigo-50 dark:bg-indigo-900/20', gradient: 'from-indigo-600 to-blue-600', ring: 'ring-indigo-500', border: 'border-indigo-100 dark:border-indigo-900/30' },
@@ -173,7 +174,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       language: 'English',
       securitySettings: { pinCode: null },
       dashboardLayout: { showGrow: true, showCommunity: false },
-      notificationSettings: { enabled: true, types: { habits: true, goals: true, journal: true, motivation: true } },
+      notificationSettings: { 
+        enabled: true, 
+        routineTimeline: { Morning: "08:00", Afternoon: "13:00", Evening: "19:00" },
+        types: { habits: true, goals: true, journal: true, motivation: true } 
+      },
       notifications: [],
       posts: [],
       events: [],
@@ -189,6 +194,43 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const [isPersistent, setIsPersistent] = useState(false);
   const [user, setUser] = useState<any>(null);
   const syncTimeoutRef = useRef<number | null>(null);
+  const lastCheckedMinute = useRef<string | null>(null);
+
+  // ROUTINE TIMELINE CHECKER
+  useEffect(() => {
+    const interval = setInterval(() => {
+      const now = new Date();
+      const timeStr = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+      
+      if (lastCheckedMinute.current === timeStr) return;
+      lastCheckedMinute.current = timeStr;
+
+      const { routineTimeline, enabled } = state.notificationSettings;
+      if (!enabled) return;
+
+      const phases: ('Morning' | 'Afternoon' | 'Evening')[] = ['Morning', 'Afternoon', 'Evening'];
+      const today = now.toISOString().split('T')[0];
+
+      phases.forEach(phase => {
+        if (routineTimeline[phase] === timeStr) {
+          const habitsToNudge = state.habits.filter(h => h.timeOfDay === phase && !h.completedDates.includes(today));
+          
+          if (habitsToNudge.length > 0) {
+            const title = `${phase} Ritual Window`;
+            const msg = `You have ${habitsToNudge.length} routine${habitsToNudge.length > 1 ? 's' : ''} to complete. Ready to evolve?`;
+            
+            // Trigger in-app UI
+            triggerNotification(title, msg, 'reminder');
+            
+            // Trigger OS-level notification
+            sendSystemNotification(title, { body: msg });
+          }
+        }
+      });
+    }, 10000); // Check every 10 seconds for precision
+
+    return () => clearInterval(interval);
+  }, [state.habits, state.notificationSettings]);
 
   useEffect(() => {
     localStorage.setItem('lumina_state', JSON.stringify(state));
@@ -223,7 +265,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
         const res = await performCloudSync(data);
         if (res.success && res.data) {
             setState(s => {
-              // Clear deletedIds that were successfully synced
               const nextState = { ...s, ...res.data };
               if (res.success) {
                 nextState.deletedIds = { goals: [], habits: [], journalEntries: [] };
