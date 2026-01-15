@@ -13,12 +13,6 @@ export default defineConfig(({ mode }) => {
                  env.VITE_GEMINI_API_KEY || 
                  '';
 
-  if (apiKey) {
-    console.log(`[Vite] Gemini API Key detected (Length: ${apiKey.length}).`);
-  } else {
-    console.error(`[Vite] ERROR: No API Key found in environment or .env file.`);
-  }
-
   return {
     plugins: [react()],
     define: {
@@ -27,7 +21,7 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       sourcemap: false,
-      chunkSizeWarningLimit: 2000,
+      chunkSizeWarningLimit: 5000, // Significantly increased to accommodate large AI/Chart libs
       rollupOptions: {
         output: {
           manualChunks(id) {
@@ -36,7 +30,7 @@ export default defineConfig(({ mode }) => {
               if (id.includes('recharts')) return 'vendor-charts';
               if (id.includes('@google/genai')) return 'vendor-ai';
               if (id.includes('react')) return 'vendor-framework';
-              return 'vendor-others';
+              return 'vendor-core';
             }
           }
         }

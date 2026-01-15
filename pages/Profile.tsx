@@ -65,9 +65,11 @@ export const Profile: React.FC = () => {
     };
 
     const updateTimelineTime = (phase: 'Morning' | 'Afternoon' | 'Evening', time: string) => {
+        if (!notificationSettings) return;
         updateUserPreferences({
             notificationSettings: {
                 ...notificationSettings,
+                // Fixed: Removed `|| {}` to prevent properties from being incorrectly inferred as optional
                 routineTimeline: {
                     ...notificationSettings.routineTimeline,
                     [phase]: time
@@ -181,7 +183,7 @@ export const Profile: React.FC = () => {
         return (
             <div className="flex items-center justify-between p-4 bg-slate-50/40 dark:bg-slate-800/20 rounded-2xl border border-slate-100 dark:border-slate-800 transition-all hover:bg-slate-50">
                 <div className="flex items-center gap-4 flex-1 min-w-0">
-                    {icon && <div className={`w-9 h-9 rounded-xl bg-white dark:bg-slate-900 shadow-sm border border-slate-50 dark:border-slate-800 flex items-center justify-center shrink-0 ${active ? themeClasses.text : 'text-slate-300'}`}>{icon}</div>}
+                    {icon && <div className={`w-9 h-9 rounded-xl bg-white dark:bg-slate-900 shadow-sm border border-slate-50 dark:border-slate-800 flex items-center justify-center shrink-0 ${active ? themeClasses?.text || 'text-indigo-600' : 'text-slate-300'}`}>{icon}</div>}
                     <div className="flex flex-col min-w-0">
                         <span className="text-[12px] font-bold text-slate-800 dark:text-slate-100 leading-none">
                             {label}
@@ -193,7 +195,7 @@ export const Profile: React.FC = () => {
                         )}
                     </div>
                 </div>
-                <button onClick={onToggle} className={`relative w-9 h-5 rounded-full transition-all duration-300 shrink-0 ml-4 ${active ? themeClasses.primary : 'bg-slate-200 dark:bg-slate-700'}`}>
+                <button onClick={onToggle} className={`relative w-9 h-5 rounded-full transition-all duration-300 shrink-0 ml-4 ${active ? (themeClasses?.primary || 'bg-indigo-600') : 'bg-slate-200 dark:bg-slate-700'}`}>
                     <div className={`absolute top-0.5 w-4 h-4 bg-white rounded-full shadow-sm transition-all ${active ? 'right-0.5' : 'left-0.5'}`} />
                 </button>
             </div>
@@ -210,8 +212,8 @@ export const Profile: React.FC = () => {
             <div className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800 space-y-6">
                 <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
-                        <User size={14} className={`shrink-0 ${themeClasses.text}`} />
-                        <h2 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] leading-none">
+                        <User size={14} className={`shrink-0 ${themeClasses?.text || 'text-indigo-600'}`} />
+                        <h2 className="text-[10px] font-bold text-slate-400 dark:text-slate-50 uppercase tracking-[0.2em] leading-none">
                             {t('identity')}
                         </h2>
                     </div>
@@ -240,14 +242,14 @@ export const Profile: React.FC = () => {
                                     maxLength={20}
                                     value={tempName} 
                                     onChange={e => setTempName(e.target.value)} 
-                                    className={`bg-slate-50 dark:bg-slate-800 border-b ${themeClasses.border} outline-none px-1 py-0.5 text-slate-800 dark:text-slate-100 w-full font-bold text-lg tracking-tight`} 
+                                    className={`bg-slate-50 dark:bg-slate-800 border-b ${themeClasses?.border || 'border-indigo-100'} outline-none px-1 py-0.5 text-slate-800 dark:text-slate-100 w-full font-bold text-lg tracking-tight`} 
                                 />
                                 <button onClick={() => { updateUserPreferences({ name: tempName }); setEditingName(false); }} className="text-emerald-500 shrink-0"><Check size={18} strokeWidth={3}/></button>
                             </div>
                         ) : (
                             <div className="flex items-center gap-2.5 min-w-0 h-8">
                                 <h3 className="text-xl font-bold text-slate-800 dark:text-white tracking-tight truncate leading-none flex items-center">{name}</h3>
-                                <button onClick={() => setEditingName(true)} className={`${themeClasses.text} text-[8px] font-black uppercase tracking-widest hover:underline shrink-0 leading-none inline-flex items-center mt-1`}>{t('edit')}</button>
+                                <button onClick={() => setEditingName(true)} className={`${themeClasses?.text || 'text-indigo-600'} text-[8px] font-black uppercase tracking-widest hover:underline shrink-0 leading-none inline-flex items-center mt-1`}>{t('edit')}</button>
                             </div>
                         )}
                         <p className="text-[9px] text-slate-400 font-bold uppercase tracking-[0.2em] truncate leading-none pt-0.5">{t('growth_traveler')}</p>
@@ -256,13 +258,12 @@ export const Profile: React.FC = () => {
 
                 <div className="space-y-3 pt-1">
                     <p className="text-[8px] font-black text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em] ml-1">{t('choose_avatar')}</p>
-                    {/* -mx-6 and px-6 align the scroll area with the card edges without clipping the avatars inside the padding */}
                     <div className="flex gap-3 overflow-x-auto no-scrollbar snap-x py-2 -mx-6 px-6">
                         {AVATARS.map(av => (
                             <button 
                                 key={av} 
                                 onClick={() => updateUserPreferences({ avatar: av })}
-                                className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center text-lg transition-all snap-center ${avatar === av ? `bg-white dark:bg-slate-800 scale-110 shadow-md ring-2 ${themeClasses.ring} ring-offset-2 dark:ring-offset-slate-900 z-10` : `bg-slate-50 dark:bg-slate-800/40 opacity-50 hover:opacity-100 border border-slate-100 dark:border-slate-800`}`}
+                                className={`w-10 h-10 shrink-0 rounded-xl flex items-center justify-center text-lg transition-all snap-center ${avatar === av ? `bg-white dark:bg-slate-800 scale-110 shadow-md ring-2 ${themeClasses?.ring || 'ring-indigo-500'} ring-offset-2 dark:ring-offset-slate-900 z-10` : `bg-slate-50 dark:bg-slate-800/40 opacity-50 hover:opacity-100 border border-slate-100 dark:border-slate-800`}`}
                             >
                                 {av}
                             </button>
@@ -274,17 +275,17 @@ export const Profile: React.FC = () => {
             {/* MOBILE SYNC & PUSH */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800 space-y-6">
                 <div className="flex items-center gap-2">
-                    <div className={themeClasses.text}><Smartphone size={14} className="shrink-0" /></div>
-                    <h2 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] leading-none">System Sync</h2>
+                    <div className={themeClasses?.text || 'text-indigo-600'}><Smartphone size={14} className="shrink-0" /></div>
+                    <h2 className="text-[10px] font-bold text-slate-400 dark:text-slate-50 uppercase tracking-[0.2em] leading-none">System Sync</h2>
                 </div>
 
                 <div className="space-y-4">
                     {renderToggle(
-                        notificationSettings.enabled, 
+                        !!notificationSettings?.enabled, 
                         handleEnableNotifications, 
                         "Mobile Push", 
                         <Smartphone size={16} />, 
-                        notificationSettings.enabled ? "Active Channel" : "Disabled"
+                        notificationSettings?.enabled ? "Active Channel" : "Disabled"
                     )}
 
                     <div className="p-4 bg-slate-50/40 dark:bg-slate-800/20 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-4">
@@ -292,14 +293,14 @@ export const Profile: React.FC = () => {
                             <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
                                 <Zap size={14} className="text-amber-500" /> Link Integrity
                             </span>
-                            <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${notificationSettings.enabled ? 'bg-emerald-50 text-emerald-500' : 'bg-slate-100 text-slate-400'}`}>
-                                {notificationSettings.enabled ? 'Live' : 'Offline'}
+                            <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${notificationSettings?.enabled ? 'bg-emerald-50 text-emerald-500' : 'bg-slate-100 text-slate-400'}`}>
+                                {notificationSettings?.enabled ? 'Live' : 'Offline'}
                             </span>
                         </div>
                         <button 
                             onClick={handleTestPush}
-                            disabled={!notificationSettings.enabled || isTestingPush}
-                            className={`w-full py-3.5 rounded-xl font-black text-[9px] uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 shadow-sm ${notificationSettings.enabled ? `${themeClasses.primary} text-white active:scale-95` : 'bg-slate-100 text-slate-300 opacity-50 cursor-not-allowed'}`}
+                            disabled={!notificationSettings?.enabled || isTestingPush}
+                            className={`w-full py-3.5 rounded-xl font-black text-[9px] uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 shadow-sm ${notificationSettings?.enabled ? `${themeClasses?.primary || 'bg-indigo-600'} text-white active:scale-95` : 'bg-slate-100 text-slate-300 opacity-50 cursor-not-allowed'}`}
                         >
                             {isTestingPush ? <Loader2 size={14} className="animate-spin" /> : <Smartphone size={14} />}
                             {isTestingPush ? 'Testing...' : 'Send Test Nudge'}
@@ -315,8 +316,8 @@ export const Profile: React.FC = () => {
             {/* ROUTINE TIMELINE CARD */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800 space-y-7">
                 <div className="flex items-center gap-2">
-                    <div className={themeClasses.text}><BellRing size={14} className="shrink-0" /></div>
-                    <h2 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] leading-none">Routine Timeline</h2>
+                    <div className={themeClasses?.text || 'text-indigo-600'}><BellRing size={14} className="shrink-0" /></div>
+                    <h2 className="text-[10px] font-bold text-slate-400 dark:text-slate-50 uppercase tracking-[0.2em] leading-none">Routine Timeline</h2>
                 </div>
 
                 <div className="grid grid-cols-1 gap-3">
@@ -328,7 +329,7 @@ export const Profile: React.FC = () => {
                             </div>
                             <input 
                                 type="time"
-                                value={notificationSettings.routineTimeline[phase]}
+                                value={notificationSettings?.routineTimeline?.[phase] || "08:00"}
                                 onChange={(e) => updateTimelineTime(phase, e.target.value)}
                                 className="bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 rounded-lg px-2 py-1 text-xs font-bold dark:text-white outline-none"
                             />
@@ -340,8 +341,8 @@ export const Profile: React.FC = () => {
             {/* SETTINGS CARD - ACCENT & LANGUAGE */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800 space-y-8">
                 <div className="flex items-center gap-2">
-                    <div className={themeClasses.text}><Settings size={14} className="shrink-0" /></div>
-                    <h2 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] leading-none">{t('settings')}</h2>
+                    <div className={themeClasses?.text || 'text-indigo-600'}><Settings size={14} className="shrink-0" /></div>
+                    <h2 className="text-[10px] font-bold text-slate-400 dark:text-slate-50 uppercase tracking-[0.2em] leading-none">{t('settings')}</h2>
                 </div>
 
                 {/* ACCENT PALETTE */}
@@ -373,7 +374,7 @@ export const Profile: React.FC = () => {
                             <button 
                                 key={lang} 
                                 onClick={() => updateUserPreferences({ language: lang })} 
-                                className={`px-3 py-3.5 rounded-xl text-[10px] font-bold uppercase tracking-widest border transition-all ${language === lang ? `${themeClasses.primary} text-white border-transparent shadow-sm` : 'bg-slate-50/50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800 text-slate-500'} whitespace-normal break-words overflow-hidden`}
+                                className={`px-3 py-3.5 rounded-xl text-[10px] font-bold uppercase tracking-widest border transition-all ${language === lang ? `${themeClasses?.primary || 'bg-indigo-600'} text-white border-transparent shadow-sm` : 'bg-slate-50/50 dark:bg-slate-800/50 border-slate-100 dark:border-slate-800 text-slate-500'} whitespace-normal break-words overflow-hidden`}
                             >
                                 {lang}
                             </button>
@@ -394,19 +395,19 @@ export const Profile: React.FC = () => {
             {/* SECURITY CARD */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800 space-y-6">
                 <div className="flex items-center gap-2">
-                    <div className={themeClasses.text}><Shield size={14} className="shrink-0" /></div>
-                    <h2 className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] leading-none">Identity Guard</h2>
+                    <div className={themeClasses?.text || 'text-indigo-600'}><Shield size={14} className="shrink-0" /></div>
+                    <h2 className="text-[10px] font-bold text-slate-400 dark:text-slate-50 uppercase tracking-[0.2em] leading-none">Identity Guard</h2>
                 </div>
 
                 {renderToggle(
-                    !!securitySettings.pinCode,
+                    !!securitySettings?.pinCode,
                     () => {
-                        if (securitySettings.pinCode) setPinCode(null);
+                        if (securitySettings?.pinCode) setPinCode(null);
                         else setSettingPin(true);
                     },
                     "App Lock",
                     <Lock size={16} />,
-                    securitySettings.pinCode ? 'Secured' : 'Open'
+                    securitySettings?.pinCode ? 'Secured' : 'Open'
                 )}
 
                 {settingPin && (
@@ -430,7 +431,7 @@ export const Profile: React.FC = () => {
                             <button 
                                 onClick={handleSavePin}
                                 disabled={pinInput.length !== 4}
-                                className={`px-4 sm:px-5 shrink-0 rounded-xl ${themeClasses.primary} text-white disabled:opacity-30 transition-opacity shadow-lg active:scale-95`}
+                                className={`px-4 sm:px-5 shrink-0 rounded-xl ${themeClasses?.primary || 'bg-indigo-600'} text-white disabled:opacity-30 transition-opacity shadow-lg active:scale-95`}
                             >
                                 <Check size={20} strokeWidth={4} />
                             </button>
@@ -441,7 +442,7 @@ export const Profile: React.FC = () => {
 
             {/* GROWTH VAULT CARD */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800 relative overflow-hidden group">
-                <div className={`absolute top-0 right-0 w-48 h-48 ${themeClasses.primary} opacity-5 rounded-full blur-[80px] -mr-24 -mt-24 transition-transform duration-1000 group-hover:scale-110`} />
+                <div className={`absolute top-0 right-0 w-48 h-48 ${themeClasses?.primary || 'bg-indigo-600'} opacity-5 rounded-full blur-[80px] -mr-24 -mt-24 transition-transform duration-1000 group-hover:scale-110`} />
                 
                 <div className="relative z-10">
                     <div className="flex items-center justify-between mb-8">
@@ -581,7 +582,7 @@ export const Profile: React.FC = () => {
                             <button 
                                 onClick={handleSaveCroppedImage}
                                 disabled={isUploading}
-                                className={`py-4 rounded-xl font-bold text-[10px] uppercase tracking-widest text-white bg-gradient-to-br ${themeClasses.gradient} shadow-lg active:scale-95 transition-all truncate flex items-center justify-center gap-2`}
+                                className={`py-4 rounded-xl font-bold text-[10px] uppercase tracking-widest text-white bg-gradient-to-br ${themeClasses?.gradient || 'from-indigo-600 to-blue-600'} shadow-lg active:scale-95 transition-all truncate flex items-center justify-center gap-2`}
                             >
                                 {isUploading ? <Loader2 size={14} className="animate-spin" /> : t('save')}
                             </button>

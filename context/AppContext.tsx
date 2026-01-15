@@ -8,7 +8,7 @@ import { performCloudSync } from '../services/syncService';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 import { sendSystemNotification, requestNotificationPermission } from '../services/notificationService';
 
-export const APP_VERSION = '1.5.0-routine-timeline';
+export const APP_VERSION = '1.5.1-stable';
 
 export const THEMES: Record<ThemeColor, any> = {
   indigo: { name: 'accent_indigo', primary: 'bg-indigo-600', text: 'text-indigo-600', secondary: 'bg-indigo-50 dark:bg-indigo-900/20', gradient: 'from-indigo-600 to-blue-600', ring: 'ring-indigo-500', border: 'border-indigo-100 dark:border-indigo-900/30' },
@@ -160,9 +160,7 @@ const AppContext = createContext<AppContextType | undefined>(undefined);
 
 export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
   const [state, setState] = useState<UserState>(() => {
-    const saved = localStorage.getItem('lumina_state');
-    if (saved) return JSON.parse(saved);
-    return {
+    const defaultState: UserState = {
       name: 'Growth Traveler',
       avatar: '🌱',
       goals: [],
@@ -187,6 +185,38 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       quizzes: [],
       savedResourceIds: []
     };
+
+    const saved = localStorage.getItem('lumina_state');
+    if (saved) {
+      try {
+        const parsed = JSON.parse(saved);
+        // DEEP MERGE Logic to prevent white screens caused by missing properties in old state versions
+        return {
+          ...defaultState,
+          ...parsed,
+          notificationSettings: {
+            ...defaultState.notificationSettings,
+            ...(parsed.notificationSettings || {}),
+            routineTimeline: {
+                ...defaultState.notificationSettings.routineTimeline,
+                ...(parsed.notificationSettings?.routineTimeline || {})
+            }
+          },
+          securitySettings: {
+            ...defaultState.securitySettings,
+            ...(parsed.securitySettings || {})
+          },
+          deletedIds: {
+            ...defaultState.deletedIds,
+            ...(parsed.deletedIds || {})
+          }
+        };
+      } catch (e) {
+        console.error("Failed to parse saved state, using defaults", e);
+        return defaultState;
+      }
+    }
+    return defaultState;
   });
 
   const [isLocked, setIsLocked] = useState(!!state.securitySettings.pinCode);
@@ -206,7 +236,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
       lastCheckedMinute.current = timeStr;
 
       const { routineTimeline, enabled } = state.notificationSettings;
-      if (!enabled) return;
+      if (!enabled || !routineTimeline) return;
 
       const phases: ('Morning' | 'Afternoon' | 'Evening')[] = ['Morning', 'Afternoon', 'Evening'];
       const today = now.toISOString().split('T')[0];
@@ -219,15 +249,12 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             const title = `${phase} Ritual Window`;
             const msg = `You have ${habitsToNudge.length} routine${habitsToNudge.length > 1 ? 's' : ''} to complete. Ready to evolve?`;
             
-            // Trigger in-app UI
             triggerNotification(title, msg, 'reminder');
-            
-            // Trigger OS-level notification
             sendSystemNotification(title, { body: msg });
           }
         }
       });
-    }, 10000); // Check every 10 seconds for precision
+    }, 10000);
 
     return () => clearInterval(interval);
   }, [state.habits, state.notificationSettings]);
@@ -264,13 +291,11 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     syncTimeoutRef.current = window.setTimeout(async () => {
         const res = await performCloudSync(data);
         if (res.success && res.data) {
-            setState(s => {
-              const nextState = { ...s, ...res.data };
-              if (res.success) {
-                nextState.deletedIds = { goals: [], habits: [], journalEntries: [] };
-              }
-              return nextState;
-            });
+            setState(s => ({
+              ...s, 
+              ...res.data,
+              deletedIds: { goals: [], habits: [], journalEntries: [] }
+            }));
         } else {
             setState(s => ({ ...s, syncStatus: { ...s.syncStatus, status: 'error' } }));
         }
@@ -305,7 +330,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const newState = { 
       ...state, 
       goals: state.goals.filter(g => g.id !== id),
-      deletedIds: { ...state.deletedIds, goals: [...state.deletedIds.goals, id] }
+      deletedIds: { ...state.deletedIds, goals: [...(state.deletedIds?.goals || []), id] }
     };
     setState(newState);
     triggerAutoSync(newState);
@@ -325,7 +350,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const newState = { 
       ...state, 
       habits: state.habits.filter(h => h.id !== id),
-      deletedIds: { ...state.deletedIds, habits: [...state.deletedIds.habits, id] }
+      deletedIds: { ...state.deletedIds, habits: [...(state.deletedIds?.habits || []), id] }
     };
     setState(newState);
     triggerAutoSync(newState);
@@ -359,7 +384,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     const newState = { 
       ...state, 
       journalEntries: state.journalEntries.filter(e => e.id !== id),
-      deletedIds: { ...state.deletedIds, journalEntries: [...state.deletedIds.journalEntries, id] }
+      deletedIds: { ...state.deletedIds, journalEntries: [...(state.deletedIds?.journalEntries || []), id] }
     };
     setState(newState);
     triggerAutoSync(newState);
@@ -433,7 +458,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const triggerNotification = (title: string, message: string, type: 'achievement' | 'motivation' | 'reminder') => {
     const id = Date.now().toString();
-    setState(s => ({ ...s, notifications: [{ id, title, message, type }, ...s.notifications] }));
+    setState(s => ({ ...s, notifications: [{ id, title, message, type }, ...(s.notifications || [])] }));
   };
 
   const dismissNotification = (id: string) => setState(s => ({ ...s, notifications: s.notifications.filter(n => n.id !== id) }));
@@ -444,20 +469,20 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
   const toggleResourceFavorite = (id: string) => {
     setState(s => {
-      const isSaved = s.savedResourceIds.includes(id);
-      const newSaved = isSaved ? s.savedResourceIds.filter(rid => rid !== id) : [...s.savedResourceIds, id];
+      const isSaved = (s.savedResourceIds || []).includes(id);
+      const newSaved = isSaved ? s.savedResourceIds.filter(rid => rid !== id) : [...(s.savedResourceIds || []), id];
       return { ...s, savedResourceIds: newSaved };
     });
   };
 
   const addPost = async (post: Post) => {
-    setState(s => ({ ...s, posts: [post, ...s.posts] }));
+    setState(s => ({ ...s, posts: [post, ...(s.posts || [])] }));
   };
 
   const likePost = async (postId: string) => {
     setState(s => ({
       ...s,
-      posts: s.posts.map(p => {
+      posts: (s.posts || []).map(p => {
         if (p.id === postId) {
           const isLiked = p.likedBy.includes(user?.id || 'me');
           const newLikedBy = isLiked 
@@ -473,14 +498,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const addComment = async (postId: string, comment: Comment) => {
     setState(s => ({
       ...s,
-      posts: s.posts.map(p => p.id === postId ? { ...p, comments: [...(p.comments || []), comment] } : p)
+      posts: (s.posts || []).map(p => p.id === postId ? { ...p, comments: [...(p.comments || []), comment] } : p)
     }));
   };
 
   const toggleEventJoin = (eventId: string) => {
     setState(s => ({
       ...s,
-      events: s.events.map(e => {
+      events: (s.events || []).map(e => {
         if (e.id === eventId) {
           const joined = !e.joined;
           return { ...e, joined, participants: joined ? e.participants + 1 : e.participants - 1 };
