@@ -320,7 +320,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                             </button>
                         </div>
                         <div className="flex items-center gap-3">
-                            {selectedDate !== todayStr && isMomentumOpen && (
+                            {selectedDate !== todayStr && {isMomentumOpen} && (
                                 <button 
                                     onClick={() => setSelectedDate(todayStr)} 
                                     className={`text-[8px] font-black uppercase tracking-[0.2em] ${themeClasses.text} animate-in fade-in slide-in-from-right-2`}
@@ -490,9 +490,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
             {/* CREATE/EDIT HABIT MODAL - Moved outside to fix full-screen blur gap */}
             {showHabitModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center animate-in fade-in duration-300">
-                    {/* Robust fixed backdrop covering the entire screen including status bar with negative inset */}
+                    {/* Hard-cover fixed backdrop covering the entire viewport overflow */}
                     <div 
-                        className="fixed -inset-y-20 inset-x-0 bg-slate-950/40 backdrop-blur-2xl" 
+                        className="fixed -inset-[100px] bg-slate-950/40 backdrop-blur-2xl" 
                         onClick={resetHabitForm} 
                     />
                     

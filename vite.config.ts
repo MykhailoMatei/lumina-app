@@ -27,13 +27,17 @@ export default defineConfig(({ mode }) => {
     build: {
       outDir: 'dist',
       sourcemap: false,
-      chunkSizeWarningLimit: 1000,
+      chunkSizeWarningLimit: 2000,
       rollupOptions: {
         output: {
-          manualChunks: {
-            'vendor-react': ['react', 'react-dom'],
-            'vendor-utils': ['lucide-react', '@google/genai'],
-            'vendor-charts': ['recharts'],
+          manualChunks(id) {
+            if (id.includes('node_modules')) {
+              if (id.includes('lucide-react')) return 'vendor-icons';
+              if (id.includes('recharts')) return 'vendor-charts';
+              if (id.includes('@google/genai')) return 'vendor-ai';
+              if (id.includes('react')) return 'vendor-framework';
+              return 'vendor-others';
+            }
           }
         }
       }
