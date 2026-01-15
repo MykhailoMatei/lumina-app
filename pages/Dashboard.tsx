@@ -490,9 +490,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
             {/* CREATE/EDIT HABIT MODAL - Moved outside to fix full-screen blur gap */}
             {showHabitModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center animate-in fade-in duration-300">
-                    {/* Explicit fixed backdrop covering the entire screen */}
+                    {/* Robust fixed backdrop covering the entire screen including status bar with negative inset */}
                     <div 
-                        className="fixed inset-0 bg-slate-950/40 backdrop-blur-2xl" 
+                        className="fixed -inset-y-20 inset-x-0 bg-slate-950/40 backdrop-blur-2xl" 
                         onClick={resetHabitForm} 
                     />
                     
