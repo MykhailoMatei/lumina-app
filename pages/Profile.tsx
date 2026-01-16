@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp, THEMES } from '../context/AppContext';
 import { ThemeColor, AppLanguage } from '../types';
@@ -39,37 +40,36 @@ export const Profile: React.FC = () => {
     const [zoom, setZoom] = useState(1);
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
-    // Fixed: Initialize dragStart with default values instead of undefined clientX/clientY
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
     const isImageAvatar = !!(avatar && (avatar.startsWith('data:image') || avatar.startsWith('http')));
     
-    // Enhanced Standalone Detection for Android/iOS PWAs
     const [isStandalone, setIsStandalone] = useState(false);
     const [swActive, setSwActive] = useState(false);
-    const [backendSynced, setBackendSynced] = useState(false);
 
     useEffect(() => {
-        const checkStatus = async () => {
+        const checkStatus = () => {
             const isInstalled = 
                 window.matchMedia('(display-mode: standalone)').matches || 
-                window.matchMedia('(display-mode: minimal-ui)').matches ||
                 (window.navigator as any).standalone === true ||
                 window.location.search.includes('source=pwa');
                 
             setIsStandalone(isInstalled);
 
+            // Detection: Check for the actual 'controller' which handles fetch/push
             if ('serviceWorker' in navigator) {
-                try {
-                    const reg = await navigator.serviceWorker.getRegistration();
-                    setSwActive(!!reg?.active);
-                } catch (e) {
-                    setSwActive(false);
-                }
+                setSwActive(!!navigator.serviceWorker.controller);
             }
         };
+
         checkStatus();
-        window.matchMedia('(display-mode: standalone)').addEventListener('change', checkStatus);
+
+        // Listen for controller changes (when SW initializes after mount)
+        if ('serviceWorker' in navigator) {
+            const handleControllerChange = () => setSwActive(true);
+            navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
+            return () => navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+        }
     }, []);
 
     const onMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
@@ -92,32 +92,27 @@ export const Profile: React.FC = () => {
     const handleEnableNotifications = async () => {
         const currentlyEnabled = !!notificationSettings?.enabled;
 
-        // 1. If currently enabled, turn it OFF
         if (currentlyEnabled) {
-            updateUserPreferences({
-                notificationSettings: {
-                    ...notificationSettings,
-                    enabled: false
-                }
-            });
+            updateUserPreferences({ notificationSettings: { ...notificationSettings, enabled: false } });
             triggerNotification("Alerts Paused", "Lumina will stay quiet for now.", "reminder");
             return;
         }
 
-        // 2. Platform & Environment Pre-Checks
         const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
         
-        // Check for Auth requirement
         if (!user) {
-            triggerNotification("Identity Required", "Please 'Connect Account' in the Growth Vault below to enable remote notifications.", "reminder");
+            triggerNotification("Identity Required", "Please 'Connect Account' below to enable remote notifications.", "reminder");
             setShowAuth(true);
             return;
         }
 
-        // Check for Service Worker (Essential for Push)
+        // Improved SW check: If it's not active, try to wait for it or warn
         if (!swActive) {
-            triggerNotification("System Initializing", "The background system (Service Worker) is not active. Please refresh the app or try 'Add to Home Screen'.", "reminder");
-            return;
+            // Check one more time directly from the navigator
+            if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
+                 triggerNotification("System Initializing", "The background system is starting. If this persists, please refresh the app.", "reminder");
+                 return;
+            }
         }
 
         const permissionState = await requestNotificationPermission();
@@ -126,31 +121,24 @@ export const Profile: React.FC = () => {
             if (isIOS && !isStandalone) {
                 triggerNotification("iOS Integration", "On iPhone, you must 'Add to Home Screen' via the share menu to enable notifications.", "reminder");
             } else {
-                triggerNotification("Not Supported", "Your browser does not support the Web Push API.", "reminder");
+                triggerNotification("Not Supported", "Your browser does not support Web Push.", "reminder");
             }
             return;
         }
 
         if (permissionState === 'denied') {
-            triggerNotification("Access Denied", "Notifications are blocked in your browser settings. Please reset site permissions.", "reminder");
+            triggerNotification("Access Denied", "Notifications are blocked. Please reset site permissions in your browser settings.", "reminder");
             return;
         }
 
         if (permissionState === 'granted') {
-            // Subscribe the user to the backend
             const sub = await subscribeToPush(user.id);
             if (sub) {
-                setBackendSynced(true);
-                updateUserPreferences({
-                    notificationSettings: {
-                        ...notificationSettings,
-                        enabled: true
-                    }
-                });
-                triggerNotification("Lumina Linked", "Remote signal active! You'll now receive growth nudges.", "achievement");
-                await sendSystemNotification("Connection Success", { body: "System alerts are now live! 🚀" });
+                updateUserPreferences({ notificationSettings: { ...notificationSettings, enabled: true } });
+                triggerNotification("Lumina Linked", "Remote signal active! 🚀", "achievement");
+                await sendSystemNotification("Connection Success", { body: "System alerts are now live!" });
             } else {
-                triggerNotification("Sync Failed", "Could not link to the push network. Ensure you have a stable connection.", "reminder");
+                triggerNotification("Sync Failed", "Could not link to the push network. Try again in a moment.", "reminder");
             }
         }
     };
@@ -167,16 +155,13 @@ export const Profile: React.FC = () => {
             return;
         }
 
-        // Try local notification first
         await sendSystemNotification("Lumina Link Test", {
             body: "Link Integrity Verified. Local signal is active! 🚀",
             tag: 'test-push'
         });
 
-        // Also try to trigger backend if user is logged in
         if (user) {
-            const { error } = await triggerBackendTestNudge();
-            if (error) console.log("Backend nudge skipped: Edge Function not deployed yet.");
+            await triggerBackendTestNudge();
         }
         
         setTimeout(() => setIsTestingPush(false), 2000);
@@ -187,10 +172,7 @@ export const Profile: React.FC = () => {
         updateUserPreferences({
             notificationSettings: {
                 ...notificationSettings,
-                routineTimeline: {
-                    ...notificationSettings.routineTimeline,
-                    [phase]: time
-                }
+                routineTimeline: { ...notificationSettings.routineTimeline, [phase]: time }
             }
         });
     };
@@ -263,9 +245,7 @@ export const Profile: React.FC = () => {
                 <div className="flex items-center gap-4 flex-1 min-w-0">
                     {icon && <div className={`w-9 h-9 rounded-xl bg-white dark:bg-slate-900 shadow-sm border border-slate-50 dark:border-slate-800 flex items-center justify-center shrink-0 ${active ? themeClasses?.text || 'text-indigo-600' : 'text-slate-300'}`}>{icon}</div>}
                     <div className="flex flex-col min-w-0">
-                        <span className="text-[12px] font-bold text-slate-800 dark:text-slate-100 leading-none">
-                            {label}
-                        </span>
+                        <span className="text-[12px] font-bold text-slate-800 dark:text-slate-100 leading-none">{label}</span>
                         {subLabel && (
                             <span className="text-[9px] font-bold text-slate-400 uppercase tracking-widest mt-1.5 opacity-60">
                                 {subLabel}
@@ -280,12 +260,11 @@ export const Profile: React.FC = () => {
         );
     };
 
-    // Calculate sub-label for push notifications
     const getNotificationStatus = () => {
         if (!('Notification' in window)) return "API Unsupported";
         if (Notification.permission === 'denied') return "Blocked by Browser";
         if (!user) return "Login Required";
-        if (!swActive) return "System Pending Refresh";
+        if (!swActive) return "System Initializing...";
         return notificationSettings?.enabled ? "Active Channel" : "Disabled";
     };
 
@@ -314,8 +293,8 @@ export const Profile: React.FC = () => {
                     <div className="flex justify-between"><span>Haptic Engine:</span> <span>{'vibrate' in navigator ? 'READY' : 'N/A'}</span></div>
                     <div className="mt-4 p-3 bg-white/5 rounded-xl text-white/60 leading-relaxed italic">
                         {isStandalone 
-                            ? "✓ PWA Integrity Verified. Background nudges should be active." 
-                            : "⚠ App is running in 'Browser Tab' mode. Use 'Add to Home Screen' for deep mobile integration."}
+                            ? "✓ PWA Mode Active. Background nudges should be functional." 
+                            : "⚠ App is running in 'Browser Tab' mode. Use 'Add to Home Screen' for background system integration."}
                     </div>
                 </div>
             )}
@@ -325,9 +304,7 @@ export const Profile: React.FC = () => {
                 <div className="flex items-center justify-between gap-4">
                     <div className="flex items-center gap-2 flex-1 min-w-0">
                         <User size={14} className={`shrink-0 ${themeClasses?.text || 'text-indigo-600'}`} />
-                        <h2 className="text-[10px] font-bold text-slate-400 dark:text-slate-50 uppercase tracking-[0.2em] leading-none">
-                            {t('identity')}
-                        </h2>
+                        <h2 className="text-[10px] font-bold text-slate-400 dark:text-slate-50 uppercase tracking-[0.2em] leading-none">{t('identity')}</h2>
                     </div>
                     <input type="file" ref={fileInputRef} onChange={handleFileChange} accept="image/*" className="hidden" />
                 </div>
@@ -337,11 +314,7 @@ export const Profile: React.FC = () => {
                         onClick={() => fileInputRef.current?.click()}
                         className="w-16 h-16 sm:w-20 sm:h-20 rounded-2xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-3xl border border-slate-100 dark:border-slate-700 shrink-0 overflow-hidden relative group transition-transform active:scale-95"
                     >
-                        {isImageAvatar ? (
-                            <img src={avatar} className="w-full h-full object-cover" alt={name} />
-                        ) : (
-                            avatar
-                        )}
+                        {isImageAvatar ? <img src={avatar} className="w-full h-full object-cover" alt={name} /> : avatar}
                         <div className="absolute inset-0 bg-black/20 opacity-0 group-hover:opacity-100 flex items-center justify-center transition-opacity">
                             <Camera size={14} className="text-white" />
                         </div>
@@ -423,7 +396,7 @@ export const Profile: React.FC = () => {
                          <div className="bg-amber-50/50 dark:bg-amber-950/20 p-4 rounded-2xl border border-amber-100 dark:border-amber-900/30 flex gap-3">
                             <ShieldAlert size={16} className="text-amber-500 shrink-0" />
                             <div className="text-[9px] font-bold text-amber-700 dark:text-amber-300 leading-relaxed italic">
-                                <strong>Mobile Note:</strong> This app is running in a browser tab. For background sync, please use <strong>"Add to Home Screen"</strong> in your browser menu.
+                                <strong>Mobile Note:</strong> App is in browser mode. For full background sync, please use <strong>"Add to Home Screen"</strong>.
                             </div>
                          </div>
                     )}
@@ -462,7 +435,6 @@ export const Profile: React.FC = () => {
                     <h2 className="text-[10px] font-bold text-slate-400 dark:text-slate-50 uppercase tracking-[0.2em] leading-none">{t('settings')}</h2>
                 </div>
 
-                {/* ACCENT PALETTE */}
                 <div className="space-y-4">
                     <div className="flex items-center gap-2 text-slate-600 dark:text-slate-400 ml-1">
                         <Palette size={12} className="shrink-0" />
@@ -537,18 +509,17 @@ export const Profile: React.FC = () => {
                             <input 
                                 type="text"
                                 inputMode="numeric"
-                                autoComplete="one-time-code"
                                 pattern="\d{4}"
                                 maxLength={4}
                                 value={pinInput}
                                 onChange={e => setPinInput(e.target.value.replace(/\D/g, ''))}
                                 placeholder="••••"
-                                className="flex-1 min-w-0 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 rounded-xl px-2 sm:px-4 py-3 text-center text-2xl font-black tracking-[0.25em] dark:text-white outline-none focus:ring-2 focus:ring-indigo-500/20"
+                                className="flex-1 min-w-0 bg-white dark:bg-slate-900 border border-slate-100 dark:border-slate-700 rounded-xl px-2 sm:px-4 py-3 text-center text-2xl font-black tracking-[0.25em] dark:text-white outline-none"
                             />
                             <button 
                                 onClick={handleSavePin}
                                 disabled={pinInput.length !== 4}
-                                className={`px-4 sm:px-5 shrink-0 rounded-xl ${themeClasses?.primary || 'bg-indigo-600'} text-white disabled:opacity-30 transition-opacity shadow-lg active:scale-95`}
+                                className={`px-4 sm:px-5 shrink-0 rounded-xl ${themeClasses?.primary || 'bg-indigo-600'} text-white disabled:opacity-30 shadow-lg active:scale-95`}
                             >
                                 <Check size={20} strokeWidth={4} />
                             </button>
@@ -569,17 +540,11 @@ export const Profile: React.FC = () => {
                             </div>
                             <div className="min-w-0">
                                 <h2 className="text-[12px] font-bold uppercase text-slate-800 dark:text-white tracking-[0.2em] truncate">Growth Vault</h2>
-                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest truncate">
-                                    {user ? 'Secured & Synchronized' : 'Offline Persistence Only'}
-                                </p>
+                                <p className="text-[9px] font-bold text-slate-400 uppercase tracking-widest truncate">{user ? 'Secured & Synchronized' : 'Offline Persistence Only'}</p>
                             </div>
                         </div>
                         {user && (
-                            <button 
-                                onClick={syncWithCloud}
-                                disabled={syncStatus?.status === 'pending'}
-                                className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-slate-50 dark:bg-slate-800 rounded-2xl text-slate-400 hover:text-slate-600 transition-all active:scale-90 shrink-0"
-                            >
+                            <button onClick={syncWithCloud} disabled={syncStatus?.status === 'pending'} className="w-10 h-10 sm:w-12 sm:h-12 flex items-center justify-center bg-slate-50 dark:bg-slate-800 rounded-2xl text-slate-400 hover:text-slate-600 transition-all active:scale-90 shrink-0">
                                 <RefreshCw size={18} className={syncStatus?.status === 'pending' ? 'animate-spin' : ''} />
                             </button>
                         )}
@@ -588,14 +553,9 @@ export const Profile: React.FC = () => {
                     {!user ? (
                         <div className="space-y-6">
                             <div className="bg-slate-50/80 dark:bg-slate-800/40 rounded-[1.75rem] p-5 border border-slate-100 dark:border-slate-800">
-                                <p className="text-[12px] font-bold text-slate-500 dark:text-slate-400 leading-relaxed">
-                                    Your personal evolution is currently <span className="text-emerald-500 font-bold">local-only</span>. Establish a secure vault to synchronize your journey across all devices.
-                                </p>
+                                <p className="text-[12px] font-bold text-slate-500 dark:text-slate-400 leading-relaxed">Your evolution is currently <span className="text-emerald-500 font-bold">local-only</span>. Synchronize your journey across devices.</p>
                             </div>
-                            <button 
-                                onClick={() => setShowAuth(true)}
-                                className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-5 rounded-[1.75rem] text-[10px] font-bold uppercase tracking-[0.2em] flex items-center justify-center gap-3 shadow-md hover:scale-[1.02] active:scale-[0.98] transition-all"
-                            >
+                            <button onClick={() => setShowAuth(true)} className="w-full bg-slate-900 dark:bg-white text-white dark:text-slate-900 py-5 rounded-[1.75rem] text-[10px] font-bold uppercase tracking-[0.2em] flex items-center justify-center gap-3 shadow-md hover:scale-[1.02] transition-all">
                                 <Link2 size={14} /> Claim Your Identity <ArrowRight size={14} />
                             </button>
                         </div>
@@ -603,20 +563,13 @@ export const Profile: React.FC = () => {
                         <div className="space-y-5">
                             <div className="bg-slate-50/80 dark:bg-slate-800/40 rounded-[1.75rem] p-5 border border-slate-100 dark:border-slate-800 flex items-center justify-between gap-3">
                                 <div className="flex items-center gap-4 overflow-hidden">
-                                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 shrink-0">
-                                        <ShieldCheck size={18} />
-                                    </div>
+                                    <div className="w-10 h-10 rounded-xl bg-emerald-500/10 flex items-center justify-center text-emerald-500 shrink-0"><ShieldCheck size={18} /></div>
                                     <div className="flex flex-col min-w-0">
                                         <span className="text-[8px] font-bold uppercase text-slate-400 tracking-widest">Vault Owner</span>
                                         <span className="text-[12px] font-bold text-slate-700 dark:text-slate-200 truncate">{user.email}</span>
                                     </div>
                                 </div>
-                                <button 
-                                    onClick={signOut}
-                                    className="p-3 rounded-xl bg-white dark:bg-slate-800 text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all shrink-0 shadow-sm border border-slate-100 dark:border-slate-700"
-                                >
-                                    <LogOut size={18} />
-                                </button>
+                                <button onClick={signOut} className="p-3 rounded-xl bg-white dark:bg-slate-800 text-slate-400 hover:bg-rose-50 hover:text-rose-500 transition-all shrink-0 border border-slate-100 dark:border-slate-700"><LogOut size={18} /></button>
                             </div>
                         </div>
                     )}
@@ -625,52 +578,35 @@ export const Profile: React.FC = () => {
 
             {/* DANGER ZONE */}
             <div className="px-2 pt-4">
-                <button 
-                    onClick={deleteAccount}
-                    className="w-full py-4 text-rose-500 text-[10px] font-black uppercase tracking-[0.25em] flex items-center justify-center gap-2 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-2xl transition-all"
-                >
+                <button onClick={deleteAccount} className="w-full py-4 text-rose-500 text-[10px] font-black uppercase tracking-[0.25em] flex items-center justify-center gap-2 hover:bg-rose-50 dark:hover:bg-rose-950/20 rounded-2xl transition-all">
                     <Trash2 size={14} /> {t('delete_account')}
                 </button>
             </div>
 
-            {/* MODALS */}
             {showAuth && <AuthModal onClose={() => setShowAuth(false)} />}
             
             {showCropModal && selectedImgSrc && (
                 <div className="fixed inset-0 z-[200] bg-slate-900/40 backdrop-blur-xl flex items-center justify-center p-6 animate-in fade-in duration-300">
                     <div className="bg-white dark:bg-slate-900 w-full max-w-[280px] rounded-[2.5rem] p-8 shadow-2xl overflow-hidden relative border border-slate-100 dark:border-slate-800 animate-in zoom-in-95 duration-300">
                         <div className="flex justify-between items-center mb-6">
-                            <div className="min-w-0">
-                                <h3 className="font-bold text-slate-800 dark:text-slate-50 text-xl tracking-tight truncate">{t('adjust_photo')}</h3>
-                                <p className="text-[9px] text-slate-400 font-bold uppercase tracking-widest mt-1 truncate">{t('resize_identity')}</p>
-                            </div>
-                            <button onClick={() => {setShowCropModal(false); setSelectedImgSrc(null);}} className="text-slate-300 hover:text-slate-500 transition-colors p-2 bg-slate-50 dark:bg-slate-800 rounded-full shadow-sm shrink-0 ml-4"><X size={18}/></button>
+                            <h3 className="font-bold text-slate-800 dark:text-slate-50 text-xl tracking-tight truncate">{t('adjust_photo')}</h3>
+                            <button onClick={() => {setShowCropModal(false); setSelectedImgSrc(null);}} className="text-slate-300 hover:text-slate-500 p-2"><X size={18}/></button>
                         </div>
 
                         <div className="relative aspect-square w-full bg-slate-100 dark:bg-slate-800 rounded-2xl overflow-hidden mb-6 shadow-inner group">
                             <div 
                                 className="w-full h-full cursor-move touch-none"
-                                onMouseDown={onMouseDown}
-                                onMouseMove={onMouseMove}
-                                onMouseUp={() => setIsDragging(false)}
-                                onMouseLeave={() => setIsDragging(false)}
-                                onTouchStart={onMouseDown}
-                                onTouchMove={onMouseMove}
-                                onTouchEnd={() => setIsDragging(false)}
+                                onMouseDown={onMouseDown} onMouseMove={onMouseMove}
+                                onMouseUp={() => setIsDragging(false)} onMouseLeave={() => setIsDragging(false)}
+                                onTouchStart={onMouseDown} onTouchMove={onMouseMove} onTouchEnd={() => setIsDragging(false)}
                             >
                                 <img 
-                                    src={selectedImgSrc} 
-                                    alt={t('adjust_photo')} 
-                                    className="pointer-events-none select-none max-w-none origin-center transition-transform duration-75"
-                                    style={{
-                                        transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`,
-                                        width: '100%',
-                                        height: 'auto'
-                                    }}
+                                    src={selectedImgSrc} alt={t('adjust_photo')} 
+                                    className="pointer-events-none select-none max-w-none origin-center"
+                                    style={{ transform: `translate(${offset.x}px, ${offset.y}px) scale(${zoom})`, width: '100%', height: 'auto' }}
                                 />
                             </div>
                             <div className="absolute inset-0 pointer-events-none ring-[100px] ring-white/80 dark:ring-slate-950/80 rounded-full" />
-                            <div className="absolute inset-0 pointer-events-none border-[2px] border-dashed border-white/50 rounded-full" />
                         </div>
 
                         <div className="space-y-4 mb-8 px-1">
@@ -679,28 +615,15 @@ export const Profile: React.FC = () => {
                                 <span className="text-[10px] font-bold">{(zoom * 100).toFixed(0)}%</span>
                             </div>
                             <input 
-                                type="range" 
-                                min="0.5" 
-                                max="3" 
-                                step="0.01" 
-                                value={zoom} 
+                                type="range" min="0.5" max="3" step="0.01" value={zoom} 
                                 onChange={(e) => setZoom(parseFloat(e.target.value))}
                                 className={`w-full h-1 rounded-lg appearance-none cursor-pointer bg-slate-100 dark:bg-slate-800 accent-${themeColor}-500`}
                             />
                         </div>
 
                         <div className="grid grid-cols-2 gap-3">
-                            <button 
-                                onClick={() => {setShowCropModal(false); setSelectedImgSrc(null);}}
-                                className="py-4 rounded-xl font-bold text-[10px] uppercase tracking-widest bg-slate-50 dark:bg-slate-800 text-slate-500 transition-all active:scale-95 border border-slate-100 dark:border-slate-800 shadow-sm truncate"
-                            >
-                                {t('back')}
-                            </button>
-                            <button 
-                                onClick={handleSaveCroppedImage}
-                                disabled={isUploading}
-                                className={`py-4 rounded-xl font-bold text-[10px] uppercase tracking-widest text-white bg-gradient-to-br ${themeClasses?.gradient || 'from-indigo-600 to-blue-600'} shadow-lg active:scale-95 transition-all truncate flex items-center justify-center gap-2`}
-                            >
+                            <button onClick={() => {setShowCropModal(false); setSelectedImgSrc(null);}} className="py-4 rounded-xl font-bold text-[10px] uppercase tracking-widest bg-slate-50 dark:bg-slate-800 text-slate-500 transition-all border border-slate-100 dark:border-slate-800 shadow-sm truncate">{t('back')}</button>
+                            <button onClick={handleSaveCroppedImage} disabled={isUploading} className={`py-4 rounded-xl font-bold text-[10px] uppercase tracking-widest text-white bg-gradient-to-br ${themeClasses?.gradient || 'from-indigo-600 to-blue-600'} shadow-lg transition-all truncate flex items-center justify-center gap-2`}>
                                 {isUploading ? <Loader2 size={14} className="animate-spin" /> : t('save')}
                             </button>
                         </div>
