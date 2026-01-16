@@ -190,7 +190,7 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // DEEP MERGE Logic to prevent white screens caused by missing properties in old state versions
+        // DEEP MERGE Logic with defensive defaults to prevent crashes on stale data versions
         return {
           ...defaultState,
           ...parsed,
@@ -200,6 +200,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
             routineTimeline: {
                 ...defaultState.notificationSettings.routineTimeline,
                 ...(parsed.notificationSettings?.routineTimeline || {})
+            },
+            types: {
+                ...defaultState.notificationSettings.types,
+                ...(parsed.notificationSettings?.types || {})
             }
           },
           securitySettings: {

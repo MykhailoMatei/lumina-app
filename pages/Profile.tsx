@@ -56,12 +56,19 @@ export const Profile: React.FC = () => {
     };
 
     const handleTestPush = async () => {
+        if (isTestingPush) return;
         setIsTestingPush(true);
-        await sendSystemNotification("Lumina Mobile Test", {
-            body: "Your phone is now synced with your growth rituals! 🚀",
-            tag: 'test-push'
-        });
-        setTimeout(() => setIsTestingPush(false), 2000);
+        try {
+            await sendSystemNotification("Lumina Mobile Test", {
+                body: "Your phone is now synced with your growth rituals! 🚀",
+                tag: 'test-push'
+            });
+        } catch (err) {
+            console.error("Test notification failed", err);
+        } finally {
+            // Keep the spinner for at least 2 seconds for visual feedback
+            setTimeout(() => setIsTestingPush(false), 2000);
+        }
     };
 
     const updateTimelineTime = (phase: 'Morning' | 'Afternoon' | 'Evening', time: string) => {
@@ -69,7 +76,6 @@ export const Profile: React.FC = () => {
         updateUserPreferences({
             notificationSettings: {
                 ...notificationSettings,
-                // Fixed: Removed `|| {}` to prevent properties from being incorrectly inferred as optional
                 routineTimeline: {
                     ...notificationSettings.routineTimeline,
                     [phase]: time
