@@ -1,7 +1,3 @@
-<<<<<<< HEAD
-
-=======
->>>>>>> 810465e (Initial commit: Lumina Growth & Journal)
 {
   "name": "lumina-app",
   "private": true,
@@ -18,12 +14,8 @@
     "lucide-react": "^0.475.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
-<<<<<<< HEAD
-    "recharts": "^2.15.0"
-=======
     "recharts": "^2.15.0",
     "supabase": "^2.72.7"
->>>>>>> 810465e (Initial commit: Lumina Growth & Journal)
   },
   "devDependencies": {
     "@types/node": "^22.13.1",

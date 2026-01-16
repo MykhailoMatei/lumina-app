@@ -1,4 +1,3 @@
-
 /**
  * Browser-level System Notifications Service
  * Enhanced for Service Worker / Mobile PWA support
@@ -10,16 +9,27 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
     if (Notification.permission === 'granted') return true;
     
     if (Notification.permission !== 'denied') {
-        const permission = await Notification.requestPermission();
-        return permission === 'granted';
+        try {
+            const permission = await Notification.requestPermission();
+            return permission === 'granted';
+        } catch (e) {
+            console.error("Permission request failed", e);
+            return false;
+        }
     }
     
     return false;
 };
 
-export const sendSystemNotification = async (title: string, options?: NotificationOptions) => {
-    if (!('Notification' in window) || Notification.permission !== 'granted') {
-        return null;
+export const sendSystemNotification = async (title: string, options?: NotificationOptions): Promise<'success' | 'denied' | 'error'> => {
+    if (!('Notification' in window)) {
+        console.warn("Notifications not supported in this browser.");
+        return 'error';
+    }
+
+    if (Notification.permission !== 'granted') {
+        console.warn("Notification permission not granted.");
+        return 'denied';
     }
 
     const defaultOptions: any = {
@@ -27,26 +37,35 @@ export const sendSystemNotification = async (title: string, options?: Notificati
         badge: 'https://cdn-icons-png.flaticon.com/512/3237/3237472.png',
         silent: false,
         vibrate: [200, 100, 200],
+        tag: 'lumina-nudge',
+        renotify: true,
         ...options
     };
 
-    // Fast check for Service Worker. We don't await .ready here to avoid infinite hangs on some mobile browsers.
-    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+    // Mobile Strategy: Always try Service Worker first for PWA consistency.
+    if ('serviceWorker' in navigator) {
         try {
-            const registration = await navigator.serviceWorker.getRegistration();
+            // Wait for the service worker to be ready with a slightly longer timeout for mobile
+            const registration = await Promise.race([
+                navigator.serviceWorker.ready,
+                new Promise<null>((_, reject) => setTimeout(() => reject(new Error('SW Timeout')), 2000))
+            ]);
+
             if (registration) {
-                return registration.showNotification(title, defaultOptions);
+                await (registration as ServiceWorkerRegistration).showNotification(title, defaultOptions);
+                return 'success';
             }
         } catch (e) {
-            console.warn("SW notification failed", e);
+            console.warn("Service Worker notification attempt failed, trying window fallback", e);
         }
     }
 
-    // Fallback to standard notification (works on desktop and some mobile)
+    // Desktop/Standard Fallback
     try {
-        return new Notification(title, defaultOptions);
+        new Notification(title, defaultOptions);
+        return 'success';
     } catch (e) {
-        console.warn("Standard notification failed", e);
-        return null;
+        console.error("Standard notification constructor failed", e);
+        return 'error';
     }
 };

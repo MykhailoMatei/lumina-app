@@ -66,14 +66,30 @@ export const Profile: React.FC = () => {
     const handleTestPush = async () => {
         if (isTestingPush) return;
         setIsTestingPush(true);
+        
+        // Android/Chrome Haptic Feedback
         if ('vibrate' in navigator) navigator.vibrate(50);
+
         try {
-            const success = await sendSystemNotification("Lumina Mobile Link", {
+            // Check permission first. If it's "default", it means the browser blocked the previous attempt
+            if (Notification.permission !== 'granted') {
+                const granted = await requestNotificationPermission();
+                if (!granted) {
+                    triggerNotification("Permission Required", "Please allow notifications in your device settings to receive alerts.", "reminder");
+                    setIsTestingPush(false);
+                    return;
+                }
+            }
+
+            const result = await sendSystemNotification("Lumina Mobile Link", {
                 body: "Link Integrity Verified. Your phone is synced! 🚀",
                 tag: 'test-push'
             });
-            if (!success) {
-                triggerNotification("Link Active", "The system signal is live, but your browser is blocking the popup. Ensure you've added Lumina to your Home Screen!", "motivation");
+
+            if (result === 'denied') {
+                triggerNotification("Access Revoked", "System permissions have been disabled. Re-enable them in browser settings.", "reminder");
+            } else if (result === 'error') {
+                triggerNotification("Link Active", "The system signal is live, but your browser is blocking the message. If on mobile, ensure you've used 'Add to Home Screen'!", "motivation");
             }
         } catch (err) {
             console.error("Test notification error:", err);
@@ -185,7 +201,7 @@ export const Profile: React.FC = () => {
         }
     }, [settingPin]);
 
-    // 8. Helper Components (within scope)
+    // 8. Helper Components
     const renderToggle = (active: boolean, onToggle: () => void, label: string, icon?: React.ReactNode, subLabel?: string) => {
         return (
             <div className="flex items-center justify-between p-4 bg-slate-50/40 dark:bg-slate-800/20 rounded-2xl border border-slate-100 dark:border-slate-800 transition-all hover:bg-slate-50">
