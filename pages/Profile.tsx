@@ -15,7 +15,6 @@ const LANGUAGES: AppLanguage[] = ['English', 'French', 'German', 'Ukrainian', 'S
 const AVATARS = ['🌱', '🌿', '🌳', '🚀', '🧠', '✨', '🧘', '🔥', '💎', '🌊', '☀️', '🌕'];
 
 export const Profile: React.FC = () => {
-    // 1. Context & Core State
     const { 
         name, avatar, theme, themeColor, language, themeClasses, 
         securitySettings, syncStatus, user, notificationSettings,
@@ -23,12 +22,10 @@ export const Profile: React.FC = () => {
         syncWithCloud, signOut, triggerNotification
     } = useApp();
 
-    // 2. Refs
     const fileInputRef = useRef<HTMLInputElement>(null);
     const cropCanvasRef = useRef<HTMLCanvasElement>(null);
     const pinSectionRef = useRef<HTMLDivElement>(null);
     
-    // 3. UI State
     const [editingName, setEditingName] = useState(false);
     const [tempName, setTempName] = useState(name);
     const [showAuth, setShowAuth] = useState(false);
@@ -37,7 +34,6 @@ export const Profile: React.FC = () => {
     const [pinInput, setPinInput] = useState('');
     const [isTestingPush, setIsTestingPush] = useState(false);
 
-    // 4. Crop Modal State
     const [showCropModal, setShowCropModal] = useState(false);
     const [selectedImgSrc, setSelectedImgSrc] = useState<string | null>(null);
     const [zoom, setZoom] = useState(1);
@@ -45,21 +41,26 @@ export const Profile: React.FC = () => {
     const [isDragging, setIsDragging] = useState(false);
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
-    // 5. Derived Values
     const isImageAvatar = !!(avatar && (avatar.startsWith('data:image') || avatar.startsWith('http')));
     const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
 
-    // 6. Handlers
+    // IMMEDIATE USER GESTURE HANDLER
     const handleEnableNotifications = async () => {
+        // Must be the first thing called in a click handler for mobile
         const granted = await requestNotificationPermission();
+        
         updateUserPreferences({
             notificationSettings: {
                 ...notificationSettings,
                 enabled: granted
             }
         });
+
         if (granted) {
             triggerNotification("Access Granted", "Lumina can now reach you.", "achievement");
+            await sendSystemNotification("Lumina Linked", { body: "System alerts are now live! 🚀" });
+        } else {
+            triggerNotification("Permission Denied", "Check your browser or system settings to allow alerts.", "reminder");
         }
     };
 
@@ -67,35 +68,29 @@ export const Profile: React.FC = () => {
         if (isTestingPush) return;
         setIsTestingPush(true);
         
-        // Android/Chrome Haptic Feedback
         if ('vibrate' in navigator) navigator.vibrate(50);
 
-        try {
-            // Check permission first. If it's "default", it means the browser blocked the previous attempt
-            if (Notification.permission !== 'granted') {
-                const granted = await requestNotificationPermission();
-                if (!granted) {
-                    triggerNotification("Permission Required", "Please allow notifications in your device settings to receive alerts.", "reminder");
-                    setIsTestingPush(false);
-                    return;
-                }
-            }
-
-            const result = await sendSystemNotification("Lumina Mobile Link", {
-                body: "Link Integrity Verified. Your phone is synced! 🚀",
-                tag: 'test-push'
-            });
-
-            if (result === 'denied') {
-                triggerNotification("Access Revoked", "System permissions have been disabled. Re-enable them in browser settings.", "reminder");
-            } else if (result === 'error') {
-                triggerNotification("Link Active", "The system signal is live, but your browser is blocking the message. If on mobile, ensure you've used 'Add to Home Screen'!", "motivation");
-            }
-        } catch (err) {
-            console.error("Test notification error:", err);
-        } finally {
-            setTimeout(() => setIsTestingPush(false), 2000);
+        // Ensure permission is verified immediately
+        const isPermitted = await requestNotificationPermission();
+        
+        if (!isPermitted) {
+            triggerNotification("Permission Required", "Notifications are currently blocked by your device.", "reminder");
+            setIsTestingPush(false);
+            return;
         }
+
+        const result = await sendSystemNotification("Lumina Mobile Link", {
+            body: "Link Integrity Verified. Your phone is synced! 🚀",
+            tag: 'test-push'
+        });
+
+        if (result === 'error') {
+            triggerNotification("Link Active", "The signal is live, but your browser is blocking the popup. Ensure you've used 'Add to Home Screen'!", "motivation");
+        } else if (result === 'denied') {
+            triggerNotification("Access Revoked", "Please re-enable notifications in settings.", "reminder");
+        }
+        
+        setTimeout(() => setIsTestingPush(false), 2000);
     };
 
     const updateTimelineTime = (phase: 'Morning' | 'Afternoon' | 'Evening', time: string) => {
@@ -192,7 +187,6 @@ export const Profile: React.FC = () => {
 
     const stopDragging = () => setIsDragging(false);
 
-    // 7. Effects
     useEffect(() => {
         if (settingPin && pinSectionRef.current) {
             setTimeout(() => {
@@ -201,7 +195,6 @@ export const Profile: React.FC = () => {
         }
     }, [settingPin]);
 
-    // 8. Helper Components
     const renderToggle = (active: boolean, onToggle: () => void, label: string, icon?: React.ReactNode, subLabel?: string) => {
         return (
             <div className="flex items-center justify-between p-4 bg-slate-50/40 dark:bg-slate-800/20 rounded-2xl border border-slate-100 dark:border-slate-800 transition-all hover:bg-slate-50">
