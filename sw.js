@@ -1,3 +1,4 @@
+
 /**
  * Lumina Service Worker
  * Handles background notifications and PWA features
@@ -8,7 +9,12 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  event.waitUntil(clients.claim());
+  event.waitUntil(
+    Promise.all([
+      self.clients.claim(),
+      // Optional: Clear old caches if any
+    ])
+  );
 });
 
 // Allow immediate takeover
@@ -20,7 +26,14 @@ self.addEventListener('message', (event) => {
 
 // Handle incoming push notifications
 self.addEventListener('push', (event) => {
-  const data = event.data ? event.data.json() : { title: 'Lumina', body: 'Time for your growth ritual.' };
+  let data = { title: 'Lumina', body: 'Time for your growth ritual.' };
+  try {
+    if (event.data) {
+      data = event.data.json();
+    }
+  } catch (e) {
+    data = { title: 'Lumina', body: event.data.text() };
+  }
   
   const options = {
     body: data.body,

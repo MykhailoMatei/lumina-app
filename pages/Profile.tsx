@@ -46,6 +46,17 @@ export const Profile: React.FC = () => {
     
     const [isStandalone, setIsStandalone] = useState(false);
     const [swActive, setSwActive] = useState(false);
+    const [isRetryingSw, setIsRetryingSw] = useState(false);
+
+    const checkSwStatus = async () => {
+        if ('serviceWorker' in navigator) {
+            const registration = await navigator.serviceWorker.getRegistration();
+            // A worker is "Active" if there's a registration with an active or waiting worker
+            setSwActive(!!(registration?.active || registration?.waiting || navigator.serviceWorker.controller));
+            return !!registration;
+        }
+        return false;
+    };
 
     useEffect(() => {
         const checkStatus = () => {
@@ -55,22 +66,33 @@ export const Profile: React.FC = () => {
                 window.location.search.includes('source=pwa');
                 
             setIsStandalone(isInstalled);
-
-            // Detection: Check for the actual 'controller' which handles fetch/push
-            if ('serviceWorker' in navigator) {
-                setSwActive(!!navigator.serviceWorker.controller);
-            }
+            checkSwStatus();
         };
 
         checkStatus();
 
-        // Listen for controller changes (when SW initializes after mount)
         if ('serviceWorker' in navigator) {
-            const handleControllerChange = () => setSwActive(true);
-            navigator.serviceWorker.addEventListener('controllerchange', handleControllerChange);
-            return () => navigator.serviceWorker.removeEventListener('controllerchange', handleControllerChange);
+            navigator.serviceWorker.addEventListener('controllerchange', checkSwStatus);
+            return () => navigator.serviceWorker.removeEventListener('controllerchange', checkSwStatus);
         }
     }, []);
+
+    const handleRetrySignal = async () => {
+        setIsRetryingSw(true);
+        if ('serviceWorker' in navigator) {
+            try {
+                await navigator.serviceWorker.register('./sw.js', { scope: './' });
+                await new Promise(resolve => setTimeout(resolve, 1000));
+                const active = await checkSwStatus();
+                if (active) {
+                    triggerNotification("Signal Restored", "Background system is now online.", "achievement");
+                }
+            } catch (e) {
+                console.error(e);
+            }
+        }
+        setIsRetryingSw(false);
+    };
 
     const onMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
         setIsDragging(true);
@@ -106,12 +128,11 @@ export const Profile: React.FC = () => {
             return;
         }
 
-        // Improved SW check: If it's not active, try to wait for it or warn
         if (!swActive) {
-            // Check one more time directly from the navigator
-            if (!('serviceWorker' in navigator) || !navigator.serviceWorker.controller) {
-                 triggerNotification("System Initializing", "The background system is starting. If this persists, please refresh the app.", "reminder");
-                 return;
+            const recheck = await checkSwStatus();
+            if (!recheck) {
+                triggerNotification("System Initializing", "The background system is starting. If this persists, tap 'Signal Diagnostics' to retry.", "reminder");
+                return;
             }
         }
 
@@ -287,7 +308,17 @@ export const Profile: React.FC = () => {
                         <X size={14} className="cursor-pointer" onClick={() => setShowDiagnostics(false)} />
                     </div>
                     <div className="flex justify-between"><span>Display Mode:</span> <span className={isStandalone ? 'text-emerald-400' : 'text-rose-400'}>{isStandalone ? 'STANDALONE' : 'BROWSER'}</span></div>
-                    <div className="flex justify-between"><span>Service Worker:</span> <span className={swActive ? 'text-emerald-400' : 'text-rose-400'}>{swActive ? 'ACTIVE' : 'INACTIVE'}</span></div>
+                    <div className="flex justify-between items-center">
+                        <span>Service Worker:</span> 
+                        <div className="flex items-center gap-2">
+                            <span className={swActive ? 'text-emerald-400' : 'text-rose-400'}>{swActive ? 'ACTIVE' : 'INACTIVE'}</span>
+                            {!swActive && (
+                                <button onClick={handleRetrySignal} disabled={isRetryingSw} className="px-2 py-0.5 bg-white/10 rounded-md text-white hover:bg-white/20 disabled:opacity-50">
+                                    {isRetryingSw ? 'WAITING...' : 'RETRY'}
+                                </button>
+                            )}
+                        </div>
+                    </div>
                     <div className="flex justify-between"><span>Supabase Push:</span> <span className={user ? 'text-emerald-400' : 'text-rose-400'}>{user ? 'ENABLED' : 'AUTH REQUIRED'}</span></div>
                     <div className="flex justify-between"><span>Permission:</span> <span className={Notification.permission === 'granted' ? 'text-emerald-400' : 'text-rose-400'}>{Notification.permission.toUpperCase()}</span></div>
                     <div className="flex justify-between"><span>Haptic Engine:</span> <span>{'vibrate' in navigator ? 'READY' : 'N/A'}</span></div>
