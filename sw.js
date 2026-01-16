@@ -4,20 +4,32 @@
  * Handles background notifications and PWA features
  */
 
+// Install: Force the waiting service worker to become the active service worker.
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
+// Activate: Claim all clients immediately so the app becomes "controlled" without a refresh.
 self.addEventListener('activate', (event) => {
   event.waitUntil(
     Promise.all([
       self.clients.claim(),
-      // Optional: Clear old caches if any
+      // Clear old caches if necessary in the future
     ])
   );
 });
 
-// Allow immediate takeover
+/**
+ * MANDATORY FOR MOBILE PWA:
+ * A fetch listener is required for the browser to recognize this as a valid PWA
+ * and to set navigator.serviceWorker.controller to non-null.
+ */
+self.addEventListener('fetch', (event) => {
+  // We can leave this empty for now or implement caching.
+  // The mere presence of this listener unlocks SW 'active' status on Android/iOS.
+});
+
+// Allow immediate takeover via message
 self.addEventListener('message', (event) => {
   if (event.data && event.data.type === 'SKIP_WAITING') {
     self.skipWaiting();
@@ -40,6 +52,8 @@ self.addEventListener('push', (event) => {
     icon: 'https://cdn-icons-png.flaticon.com/512/3237/3237472.png',
     badge: 'https://cdn-icons-png.flaticon.com/512/3237/3237472.png',
     vibrate: [200, 100, 200],
+    tag: 'lumina-nudge',
+    renotify: true,
     data: {
       url: self.registration.scope
     }

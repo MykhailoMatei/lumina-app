@@ -50,16 +50,27 @@ export const Profile: React.FC = () => {
 
     const checkSwStatus = async () => {
         if ('serviceWorker' in navigator) {
-            const registration = await navigator.serviceWorker.getRegistration();
-            // A worker is "Active" if there's a registration with an active or waiting worker
-            setSwActive(!!(registration?.active || registration?.waiting || navigator.serviceWorker.controller));
-            return !!registration;
+            try {
+                const registration = await navigator.serviceWorker.getRegistration();
+                // A worker is practically active if it's registered and either active, waiting, or controlling.
+                // Mobile browsers often delay the 'controller' until the next load.
+                const isActive = !!(
+                    registration?.active || 
+                    registration?.waiting || 
+                    registration?.installing || 
+                    navigator.serviceWorker.controller
+                );
+                setSwActive(isActive);
+                return isActive;
+            } catch (e) {
+                return false;
+            }
         }
         return false;
     };
 
     useEffect(() => {
-        const checkStatus = () => {
+        const initStatus = () => {
             const isInstalled = 
                 window.matchMedia('(display-mode: standalone)').matches || 
                 (window.navigator as any).standalone === true ||
@@ -69,11 +80,17 @@ export const Profile: React.FC = () => {
             checkSwStatus();
         };
 
-        checkStatus();
+        initStatus();
 
+        // Listen for changes
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.addEventListener('controllerchange', checkSwStatus);
-            return () => navigator.serviceWorker.removeEventListener('controllerchange', checkSwStatus);
+            // Re-check periodically during first minute of usage
+            const interval = setInterval(checkSwStatus, 5000);
+            return () => {
+                navigator.serviceWorker.removeEventListener('controllerchange', checkSwStatus);
+                clearInterval(interval);
+            };
         }
     }, []);
 
@@ -81,14 +98,18 @@ export const Profile: React.FC = () => {
         setIsRetryingSw(true);
         if ('serviceWorker' in navigator) {
             try {
-                await navigator.serviceWorker.register('./sw.js', { scope: './' });
-                await new Promise(resolve => setTimeout(resolve, 1000));
+                // Force a re-registration attempt
+                await navigator.serviceWorker.register('/sw.js', { scope: '/' });
+                // Short delay for browser processing
+                await new Promise(resolve => setTimeout(resolve, 1500));
                 const active = await checkSwStatus();
                 if (active) {
-                    triggerNotification("Signal Restored", "Background system is now online.", "achievement");
+                    triggerNotification("Signal Verified", "Lumina background system is now synced.", "achievement");
+                } else {
+                    triggerNotification("System Pending", "Worker registered but still initializing. Please wait.", "reminder");
                 }
             } catch (e) {
-                console.error(e);
+                triggerNotification("Registration Error", "Check your browser privacy settings.", "reminder");
             }
         }
         setIsRetryingSw(false);
@@ -120,35 +141,33 @@ export const Profile: React.FC = () => {
             return;
         }
 
-        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
-        
         if (!user) {
-            triggerNotification("Identity Required", "Please 'Connect Account' below to enable remote notifications.", "reminder");
+            triggerNotification("Identity Required", "Connect your account below to enable push notifications.", "reminder");
             setShowAuth(true);
             return;
         }
 
-        if (!swActive) {
-            const recheck = await checkSwStatus();
-            if (!recheck) {
-                triggerNotification("System Initializing", "The background system is starting. If this persists, tap 'Signal Diagnostics' to retry.", "reminder");
-                return;
-            }
+        // Final SW verify
+        const swReady = await checkSwStatus();
+        if (!swReady) {
+            triggerNotification("System Cold-Start", "Background system is warming up. Tap 'Retry' in diagnostics if this persists.", "reminder");
+            return;
         }
 
         const permissionState = await requestNotificationPermission();
         
         if (permissionState === 'unsupported') {
+            const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent);
             if (isIOS && !isStandalone) {
-                triggerNotification("iOS Integration", "On iPhone, you must 'Add to Home Screen' via the share menu to enable notifications.", "reminder");
+                triggerNotification("iOS Requirement", "On iPhone, you must 'Add to Home Screen' via the share menu for notifications.", "reminder");
             } else {
-                triggerNotification("Not Supported", "Your browser does not support Web Push.", "reminder");
+                triggerNotification("API Unsupported", "Your browser does not support the Push API.", "reminder");
             }
             return;
         }
 
         if (permissionState === 'denied') {
-            triggerNotification("Access Denied", "Notifications are blocked. Please reset site permissions in your browser settings.", "reminder");
+            triggerNotification("Access Blocked", "Please reset site permissions in browser settings.", "reminder");
             return;
         }
 
@@ -156,10 +175,10 @@ export const Profile: React.FC = () => {
             const sub = await subscribeToPush(user.id);
             if (sub) {
                 updateUserPreferences({ notificationSettings: { ...notificationSettings, enabled: true } });
-                triggerNotification("Lumina Linked", "Remote signal active! 🚀", "achievement");
-                await sendSystemNotification("Connection Success", { body: "System alerts are now live!" });
+                triggerNotification("Lumina Linked", "Signal active! 🚀", "achievement");
+                await sendSystemNotification("Secure Link Active", { body: "You are now receiving growth nudges." });
             } else {
-                triggerNotification("Sync Failed", "Could not link to the push network. Try again in a moment.", "reminder");
+                triggerNotification("Network Error", "Could not establish push link. Check your connection.", "reminder");
             }
         }
     };
@@ -171,13 +190,13 @@ export const Profile: React.FC = () => {
         if ('vibrate' in navigator) navigator.vibrate(50);
 
         if (!isPermitted) {
-            triggerNotification("Permission Required", "Notifications are blocked.", "reminder");
+            triggerNotification("Permission Needed", "Allow notifications first.", "reminder");
             setIsTestingPush(false);
             return;
         }
 
-        await sendSystemNotification("Lumina Link Test", {
-            body: "Link Integrity Verified. Local signal is active! 🚀",
+        await sendSystemNotification("Local Signal Test", {
+            body: "Ping received! Your device is responding to Lumina.",
             tag: 'test-push'
         });
 
@@ -285,7 +304,7 @@ export const Profile: React.FC = () => {
         if (!('Notification' in window)) return "API Unsupported";
         if (Notification.permission === 'denied') return "Blocked by Browser";
         if (!user) return "Login Required";
-        if (!swActive) return "System Initializing...";
+        if (!swActive) return "Signal Booting...";
         return notificationSettings?.enabled ? "Active Channel" : "Disabled";
     };
 
@@ -309,11 +328,11 @@ export const Profile: React.FC = () => {
                     </div>
                     <div className="flex justify-between"><span>Display Mode:</span> <span className={isStandalone ? 'text-emerald-400' : 'text-rose-400'}>{isStandalone ? 'STANDALONE' : 'BROWSER'}</span></div>
                     <div className="flex justify-between items-center">
-                        <span>Service Worker:</span> 
+                        <span>Background Core:</span> 
                         <div className="flex items-center gap-2">
                             <span className={swActive ? 'text-emerald-400' : 'text-rose-400'}>{swActive ? 'ACTIVE' : 'INACTIVE'}</span>
                             {!swActive && (
-                                <button onClick={handleRetrySignal} disabled={isRetryingSw} className="px-2 py-0.5 bg-white/10 rounded-md text-white hover:bg-white/20 disabled:opacity-50">
+                                <button onClick={handleRetrySignal} disabled={isRetryingSw} className="px-2 py-0.5 bg-white/10 rounded-md text-white hover:bg-white/20 disabled:opacity-50 text-[8px] font-black uppercase">
                                     {isRetryingSw ? 'WAITING...' : 'RETRY'}
                                 </button>
                             )}
@@ -324,8 +343,8 @@ export const Profile: React.FC = () => {
                     <div className="flex justify-between"><span>Haptic Engine:</span> <span>{'vibrate' in navigator ? 'READY' : 'N/A'}</span></div>
                     <div className="mt-4 p-3 bg-white/5 rounded-xl text-white/60 leading-relaxed italic">
                         {isStandalone 
-                            ? "✓ PWA Mode Active. Background nudges should be functional." 
-                            : "⚠ App is running in 'Browser Tab' mode. Use 'Add to Home Screen' for background system integration."}
+                            ? "✓ PWA Integrity Verified. Signal retry will wake up the core." 
+                            : "⚠ Browser Tab detected. Use 'Add to Home Screen' for deep mobile integration."}
                     </div>
                 </div>
             )}
@@ -407,7 +426,7 @@ export const Profile: React.FC = () => {
                     <div className="p-4 bg-slate-50/40 dark:bg-slate-800/20 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-4">
                         <div className="flex justify-between items-center">
                             <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                                <Zap size={14} className="text-amber-500" /> Link Integrity
+                                <Zap size={14} className="text-amber-500" /> Signal Integrity
                             </span>
                             <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${notificationSettings?.enabled ? 'bg-emerald-50 text-emerald-500' : 'bg-slate-100 text-slate-400'}`}>
                                 {notificationSettings?.enabled ? 'Live' : 'Offline'}
@@ -427,7 +446,7 @@ export const Profile: React.FC = () => {
                          <div className="bg-amber-50/50 dark:bg-amber-950/20 p-4 rounded-2xl border border-amber-100 dark:border-amber-900/30 flex gap-3">
                             <ShieldAlert size={16} className="text-amber-500 shrink-0" />
                             <div className="text-[9px] font-bold text-amber-700 dark:text-amber-300 leading-relaxed italic">
-                                <strong>Mobile Note:</strong> App is in browser mode. For full background sync, please use <strong>"Add to Home Screen"</strong>.
+                                <strong>PWA Hint:</strong> To unlock background alerts, please tap your browser menu and select <strong>"Add to Home Screen"</strong>.
                             </div>
                          </div>
                     )}

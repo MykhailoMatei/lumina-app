@@ -11,11 +11,11 @@ const registerServiceWorker = async () => {
   if (!('serviceWorker' in navigator)) return;
 
   try {
-    // We use a relative path but ensure it points to the root-level sw.js
-    const swPath = './sw.js';
+    // Ensuring we use the root sw.js
+    const swPath = '/sw.js';
     
     const registration = await navigator.serviceWorker.register(swPath, {
-      scope: './'
+      scope: '/'
     });
     
     console.log('Lumina SW registered:', registration.scope);
@@ -25,29 +25,23 @@ const registerServiceWorker = async () => {
       registration.waiting.postMessage({ type: 'SKIP_WAITING' });
     }
 
-    // Check for updates periodically
+    // Standard update check
     registration.update();
 
   } catch (err: any) {
-    console.warn('SW registration bypassed (likely sandbox/security):', err.message);
+    console.warn('SW registration skipped or failed:', err.message);
   }
 };
 
-// Initiate registration on window load
-window.addEventListener('load', () => {
-  registerServiceWorker();
-});
+// Initiate registration immediately
+registerServiceWorker();
 
-// Handle SW controller changes for updates
+// Handle SW controller changes to sync UI state
 if ('serviceWorker' in navigator) {
-  let refreshing = false;
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    // When a new service worker takes over, reload to ensure state consistency
-    if (!refreshing) {
-      console.log('New Service Worker active, refreshing...');
-      window.location.reload();
-      refreshing = true;
-    }
+    console.log('Service Worker controller changed. App is now controlled.');
+    // We don't necessarily need a reload if the app is designed to be reactive,
+    // but it helps ensure the new SW is managing all requests.
   });
 }
 
