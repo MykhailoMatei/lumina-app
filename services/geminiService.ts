@@ -125,8 +125,9 @@ export const generateGrowthAudit = async (
     Context: ${context}`;
 
     try {
+        // Fix: Use gemini-3-pro-preview for complex reasoning tasks like growth audits
         const res: GenerateContentResponse = await ai.models.generateContent({
-            model: 'gemini-3-flash-preview',
+            model: 'gemini-3-pro-preview',
             contents: prompt,
             config: { responseMimeType: "application/json" }
         });

@@ -1,3 +1,4 @@
+
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp, THEMES } from '../context/AppContext';
 import { ThemeColor, AppLanguage } from '../types';
@@ -5,11 +6,11 @@ import {
     User, Palette, Moon, Globe, Trash2, Shield, Settings, 
     Check, Lock, X, Move, ZoomIn, Camera,
     ShieldCheck, Loader2, Cloud, CloudOff, Link2, LogOut, ArrowRight,
-    RefreshCw, BellRing, Clock, Key, ShieldAlert, Smartphone, Zap
+    RefreshCw, BellRing, Clock, Key, ShieldAlert, Smartphone, Zap, Info, Activity, Database
 } from 'lucide-react';
 import { uploadImage } from '../services/storageService';
 import { AuthModal } from '../components/AuthModal';
-import { requestNotificationPermission, sendSystemNotification } from '../services/notificationService';
+import { requestNotificationPermission, sendSystemNotification, subscribeToPush, triggerBackendTestNudge } from '../services/notificationService';
 
 const LANGUAGES: AppLanguage[] = ['English', 'French', 'German', 'Ukrainian', 'Spanish'];
 const AVATARS = ['🌱', '🌿', '🌳', '🚀', '🧠', '✨', '🧘', '🔥', '💎', '🌊', '☀️', '🌕'];
@@ -24,7 +25,6 @@ export const Profile: React.FC = () => {
 
     const fileInputRef = useRef<HTMLInputElement>(null);
     const cropCanvasRef = useRef<HTMLCanvasElement>(null);
-    const pinSectionRef = useRef<HTMLDivElement>(null);
     
     const [editingName, setEditingName] = useState(false);
     const [tempName, setTempName] = useState(name);
@@ -33,6 +33,7 @@ export const Profile: React.FC = () => {
     const [settingPin, setSettingPin] = useState(false);
     const [pinInput, setPinInput] = useState('');
     const [isTestingPush, setIsTestingPush] = useState(false);
+    const [showDiagnostics, setShowDiagnostics] = useState(false);
 
     const [showCropModal, setShowCropModal] = useState(false);
     const [selectedImgSrc, setSelectedImgSrc] = useState<string | null>(null);
@@ -42,52 +43,118 @@ export const Profile: React.FC = () => {
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
     const isImageAvatar = !!(avatar && (avatar.startsWith('data:image') || avatar.startsWith('http')));
-    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+    
+    // Enhanced Standalone Detection for Android/iOS PWAs
+    const [isStandalone, setIsStandalone] = useState(false);
+    const [swActive, setSwActive] = useState(false);
+    const [backendSynced, setBackendSynced] = useState(false);
 
-    // IMMEDIATE USER GESTURE HANDLER
+    useEffect(() => {
+        const checkStatus = async () => {
+            const isInstalled = 
+                window.matchMedia('(display-mode: standalone)').matches || 
+                window.matchMedia('(display-mode: minimal-ui)').matches ||
+                (window.navigator as any).standalone === true ||
+                window.location.search.includes('source=pwa');
+                
+            setIsStandalone(isInstalled);
+
+            if ('serviceWorker' in navigator) {
+                try {
+                    const reg = await navigator.serviceWorker.getRegistration();
+                    setSwActive(!!reg?.active);
+                } catch (e) {
+                    setSwActive(false);
+                }
+            }
+        };
+        checkStatus();
+        window.matchMedia('(display-mode: standalone)').addEventListener('change', checkStatus);
+    }, []);
+
+    const onMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
+        setIsDragging(true);
+        const clientX = 'touches' in e ? (e as React.TouchEvent).touches[0].clientX : (e as React.MouseEvent).clientX;
+        const clientY = 'touches' in e ? (e as React.TouchEvent).touches[0].clientY : (e as React.MouseEvent).clientY;
+        setDragStart({ x: clientX - offset.x, y: clientY - offset.y });
+    };
+
+    const onMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
+        if (!isDragging) return;
+        const clientX = 'touches' in e ? (e as React.TouchEvent).touches[0].clientX : (e as React.MouseEvent).clientX;
+        const clientY = 'touches' in e ? (e as React.TouchEvent).touches[0].clientY : (e as React.MouseEvent).clientY;
+        setOffset({
+            x: clientX - dragStart.x,
+            y: clientY - dragStart.y
+        });
+    };
+
     const handleEnableNotifications = async () => {
-        // Must be the first thing called in a click handler for mobile
+        const currentlyEnabled = !!notificationSettings?.enabled;
+
+        // 1. If currently enabled, turn it OFF
+        if (currentlyEnabled) {
+            updateUserPreferences({
+                notificationSettings: {
+                    ...notificationSettings,
+                    enabled: false
+                }
+            });
+            triggerNotification("Alerts Paused", "Lumina will stay quiet for now.", "reminder");
+            return;
+        }
+
+        // 2. If currently disabled, try to turn it ON
+        // Check if the browser has permanently denied permission
+        if ('Notification' in window && Notification.permission === 'denied') {
+            triggerNotification("Permission Denied", "Notifications are blocked by your browser. Please reset site permissions in your browser settings.", "reminder");
+            return;
+        }
+
         const granted = await requestNotificationPermission();
         
-        updateUserPreferences({
-            notificationSettings: {
-                ...notificationSettings,
-                enabled: granted
-            }
-        });
-
         if (granted) {
+            if (user) {
+                const sub = await subscribeToPush(user.id);
+                if (sub) setBackendSynced(true);
+            }
+
+            updateUserPreferences({
+                notificationSettings: {
+                    ...notificationSettings,
+                    enabled: true
+                }
+            });
+
             triggerNotification("Access Granted", "Lumina can now reach you.", "achievement");
             await sendSystemNotification("Lumina Linked", { body: "System alerts are now live! 🚀" });
         } else {
-            triggerNotification("Permission Denied", "Check your browser or system settings to allow alerts.", "reminder");
+            triggerNotification("Action Required", "Lumina needs permission to send you growth nudges.", "reminder");
         }
     };
 
     const handleTestPush = async () => {
+        const isPermitted = await requestNotificationPermission();
         if (isTestingPush) return;
         setIsTestingPush(true);
-        
         if ('vibrate' in navigator) navigator.vibrate(50);
 
-        // Ensure permission is verified immediately
-        const isPermitted = await requestNotificationPermission();
-        
         if (!isPermitted) {
-            triggerNotification("Permission Required", "Notifications are currently blocked by your device.", "reminder");
+            triggerNotification("Permission Required", "Notifications are blocked.", "reminder");
             setIsTestingPush(false);
             return;
         }
 
-        const result = await sendSystemNotification("Lumina Mobile Link", {
-            body: "Link Integrity Verified. Your phone is synced! 🚀",
+        // Try local notification first
+        await sendSystemNotification("Lumina Link Test", {
+            body: "Link Integrity Verified. Local signal is active! 🚀",
             tag: 'test-push'
         });
 
-        if (result === 'error') {
-            triggerNotification("Link Active", "The signal is live, but your browser is blocking the popup. Ensure you've used 'Add to Home Screen'!", "motivation");
-        } else if (result === 'denied') {
-            triggerNotification("Access Revoked", "Please re-enable notifications in settings.", "reminder");
+        // Also try to trigger backend if user is logged in
+        if (user) {
+            const { error } = await triggerBackendTestNudge();
+            if (error) console.log("Backend nudge skipped: Edge Function not deployed yet.");
         }
         
         setTimeout(() => setIsTestingPush(false), 2000);
@@ -168,33 +235,6 @@ export const Profile: React.FC = () => {
         img.src = selectedImgSrc;
     };
 
-    const onMouseDown = (e: React.MouseEvent | React.TouchEvent) => {
-        setIsDragging(true);
-        const clientX = 'touches' in e ? (e as any).touches[0].clientX : (e as any).clientX;
-        const clientY = 'touches' in e ? (e as any).touches[0].clientY : (e as any).clientY;
-        setDragStart({ x: clientX - offset.x, y: clientY - offset.y });
-    };
-
-    const onMouseMove = (e: React.MouseEvent | React.TouchEvent) => {
-        if (!isDragging) return;
-        const clientX = 'touches' in e ? (e as any).touches[0].clientX : (e as any).clientX;
-        const clientY = 'touches' in e ? (e as any).touches[0].clientY : (e as any).clientY;
-        setOffset({
-            x: clientX - dragStart.x,
-            y: clientY - dragStart.y
-        });
-    };
-
-    const stopDragging = () => setIsDragging(false);
-
-    useEffect(() => {
-        if (settingPin && pinSectionRef.current) {
-            setTimeout(() => {
-                pinSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 300);
-        }
-    }, [settingPin]);
-
     const renderToggle = (active: boolean, onToggle: () => void, label: string, icon?: React.ReactNode, subLabel?: string) => {
         return (
             <div className="flex items-center justify-between p-4 bg-slate-50/40 dark:bg-slate-800/20 rounded-2xl border border-slate-100 dark:border-slate-800 transition-all hover:bg-slate-50">
@@ -218,11 +258,42 @@ export const Profile: React.FC = () => {
         );
     };
 
+    // Calculate sub-label for push notifications
+    const getNotificationStatus = () => {
+        if ('Notification' in window && Notification.permission === 'denied') return "Blocked by Browser";
+        return notificationSettings?.enabled ? "Active Channel" : "Disabled";
+    };
+
     return (
         <div className="pb-40 space-y-6 animate-in fade-in duration-500 max-w-full overflow-x-hidden">
-            <header className="px-1 pt-2">
+            <header className="px-1 pt-2 flex justify-between items-center">
                 <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tighter">{t('profile')}</h1>
+                <button 
+                    onClick={() => setShowDiagnostics(!showDiagnostics)}
+                    className="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-600 transition-colors"
+                >
+                    <Activity size={18} />
+                </button>
             </header>
+
+            {showDiagnostics && (
+                <div className="bg-slate-900 text-emerald-400 p-6 rounded-[2rem] font-mono text-[10px] space-y-2 animate-in slide-in-from-top-4">
+                    <div className="flex justify-between border-b border-white/10 pb-1 mb-2">
+                        <span className="font-bold text-white uppercase">Signal Diagnostics</span>
+                        <X size={14} className="cursor-pointer" onClick={() => setShowDiagnostics(false)} />
+                    </div>
+                    <div className="flex justify-between"><span>Display Mode:</span> <span>{isStandalone ? 'STANDALONE' : 'BROWSER'}</span></div>
+                    <div className="flex justify-between"><span>Service Worker:</span> <span>{swActive ? 'ACTIVE' : 'INACTIVE'}</span></div>
+                    <div className="flex justify-between"><span>Supabase Push:</span> <span className={user ? 'text-emerald-400' : 'text-rose-400'}>{user ? 'ENABLED' : 'AUTH REQUIRED'}</span></div>
+                    <div className="flex justify-between"><span>Permission:</span> <span>{Notification.permission.toUpperCase()}</span></div>
+                    <div className="flex justify-between"><span>Haptic Engine:</span> <span>{'vibrate' in navigator ? 'READY' : 'N/A'}</span></div>
+                    <div className="mt-4 p-3 bg-white/5 rounded-xl text-white/60 leading-relaxed italic">
+                        {isStandalone 
+                            ? "✓ PWA Integrity Verified. Background nudges should be active." 
+                            : "⚠ App is running in 'Browser Tab' mode. Use 'Add to Home Screen' for deep mobile integration."}
+                    </div>
+                </div>
+            )}
 
             {/* IDENTITY CARD */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800 space-y-6">
@@ -301,7 +372,7 @@ export const Profile: React.FC = () => {
                         handleEnableNotifications, 
                         "Mobile Push", 
                         <Smartphone size={16} />, 
-                        notificationSettings?.enabled ? "Active Channel" : "Disabled"
+                        getNotificationStatus()
                     )}
 
                     <div className="p-4 bg-slate-50/40 dark:bg-slate-800/20 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-4">
@@ -326,9 +397,9 @@ export const Profile: React.FC = () => {
                     {!isStandalone && (
                          <div className="bg-amber-50/50 dark:bg-amber-950/20 p-4 rounded-2xl border border-amber-100 dark:border-amber-900/30 flex gap-3">
                             <ShieldAlert size={16} className="text-amber-500 shrink-0" />
-                            <p className="text-[9px] font-bold text-amber-700 dark:text-amber-300 leading-relaxed italic">
-                                <strong>Mobile Note:</strong> Background alerts are more reliable when you <strong>Add to Home Screen</strong> via your mobile browser's share menu.
-                            </p>
+                            <div className="text-[9px] font-bold text-amber-700 dark:text-amber-300 leading-relaxed italic">
+                                <strong>Mobile Note:</strong> This app is running in a browser tab. For background sync, please use <strong>"Add to Home Screen"</strong> in your browser menu.
+                            </div>
                          </div>
                     )}
                 </div>
@@ -432,7 +503,7 @@ export const Profile: React.FC = () => {
                 )}
 
                 {settingPin && (
-                    <div ref={pinSectionRef} className="space-y-4 animate-in slide-in-from-top-4 p-5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 shadow-inner">
+                    <div className="space-y-4 animate-in slide-in-from-top-4 p-5 bg-slate-50 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-200 dark:border-slate-700 shadow-inner">
                         <div className="flex items-center justify-between">
                             <label className="text-[9px] font-black uppercase tracking-widest text-slate-400">Set 4-Digit Identity PIN</label>
                             <button onClick={() => setSettingPin(false)} className="text-slate-300 hover:text-slate-500"><X size={16}/></button>
@@ -556,11 +627,11 @@ export const Profile: React.FC = () => {
                                 className="w-full h-full cursor-move touch-none"
                                 onMouseDown={onMouseDown}
                                 onMouseMove={onMouseMove}
-                                onMouseUp={stopDragging}
-                                onMouseLeave={stopDragging}
+                                onMouseUp={() => setIsDragging(false)}
+                                onMouseLeave={() => setIsDragging(false)}
                                 onTouchStart={onMouseDown}
                                 onTouchMove={onMouseMove}
-                                onTouchEnd={stopDragging}
+                                onTouchEnd={() => setIsDragging(false)}
                             >
                                 <img 
                                     src={selectedImgSrc} 

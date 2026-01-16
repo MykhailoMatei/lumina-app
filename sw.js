@@ -8,11 +8,17 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
-  // Claim clients immediately so notifications work on the first visit
   event.waitUntil(clients.claim());
 });
 
-// Handle incoming push notifications from a backend (FCM/Web-Push)
+// Allow immediate takeover
+self.addEventListener('message', (event) => {
+  if (event.data && event.data.type === 'SKIP_WAITING') {
+    self.skipWaiting();
+  }
+});
+
+// Handle incoming push notifications
 self.addEventListener('push', (event) => {
   const data = event.data ? event.data.json() : { title: 'Lumina', body: 'Time for your growth ritual.' };
   
@@ -31,7 +37,6 @@ self.addEventListener('push', (event) => {
   );
 });
 
-// Handle notification clicks
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
