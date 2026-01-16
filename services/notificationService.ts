@@ -1,5 +1,4 @@
 
-
 /**
  * Browser-level System Notifications Service
  * Enhanced for Service Worker / Mobile PWA support
@@ -20,12 +19,9 @@ export const requestNotificationPermission = async (): Promise<boolean> => {
 
 export const sendSystemNotification = async (title: string, options?: NotificationOptions) => {
     if (!('Notification' in window) || Notification.permission !== 'granted') {
-        console.warn("Notification not sent: Permission not granted or not supported.");
         return null;
     }
 
-    // Fix: Use 'any' type for defaultOptions as standard NotificationOptions 
-    // might not include properties like 'vibrate' or 'badge' in some environments.
     const defaultOptions: any = {
         icon: 'https://cdn-icons-png.flaticon.com/512/3237/3237472.png',
         badge: 'https://cdn-icons-png.flaticon.com/512/3237/3237472.png',
@@ -34,14 +30,23 @@ export const sendSystemNotification = async (title: string, options?: Notificati
         ...options
     };
 
-    // If we have a service worker, use it (required for background/mobile)
-    if ('serviceWorker' in navigator) {
-        const registration = await navigator.serviceWorker.ready;
-        if (registration) {
-            return registration.showNotification(title, defaultOptions);
+    // Fast check for Service Worker. We don't await .ready here to avoid infinite hangs on some mobile browsers.
+    if ('serviceWorker' in navigator && navigator.serviceWorker.controller) {
+        try {
+            const registration = await navigator.serviceWorker.getRegistration();
+            if (registration) {
+                return registration.showNotification(title, defaultOptions);
+            }
+        } catch (e) {
+            console.warn("SW notification failed", e);
         }
     }
 
-    // Fallback to standard notification (only works when tab is active)
-    return new Notification(title, defaultOptions);
+    // Fallback to standard notification (works on desktop and some mobile)
+    try {
+        return new Notification(title, defaultOptions);
+    } catch (e) {
+        console.warn("Standard notification failed", e);
+        return null;
+    }
 };

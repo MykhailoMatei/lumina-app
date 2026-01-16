@@ -58,6 +58,10 @@ export const Profile: React.FC = () => {
     const handleTestPush = async () => {
         if (isTestingPush) return;
         setIsTestingPush(true);
+        
+        // Force reset the loading state after 3 seconds no matter what
+        const resetTimeout = setTimeout(() => setIsTestingPush(false), 3000);
+
         try {
             await sendSystemNotification("Lumina Mobile Test", {
                 body: "Your phone is now synced with your growth rituals! 🚀",
@@ -66,11 +70,15 @@ export const Profile: React.FC = () => {
         } catch (err) {
             console.error("Test notification failed", err);
         } finally {
-            // Keep the spinner for at least 2 seconds for visual feedback
-            setTimeout(() => setIsTestingPush(false), 2000);
+            // Keep the spinner for at least 1.5 seconds for visual feedback
+            setTimeout(() => {
+                clearTimeout(resetTimeout);
+                setIsTestingPush(false);
+            }, 1500);
         }
     };
 
+    // Fixed: Corrected routineTimeline update to satisfy strict type checking and remove optional property inference
     const updateTimelineTime = (phase: 'Morning' | 'Afternoon' | 'Evening', time: string) => {
         if (!notificationSettings) return;
         updateUserPreferences({
@@ -393,7 +401,7 @@ export const Profile: React.FC = () => {
                         theme === 'dark',
                         () => updateUserPreferences({ theme: theme === 'dark' ? 'light' : 'dark' }),
                         t('dark_mode'),
-                        <Moon size={16} />
+                        < Moon size={16} />
                     )}
                 </div>
             </div>

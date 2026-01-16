@@ -9,7 +9,7 @@ import { Insights } from './pages/Insights';
 import { Profile } from './pages/Profile';
 import { Navigation } from './components/Navigation';
 import { SecurityLock } from './components/SecurityLock';
-import { NotificationSystem } from './components/NotificationSystem';
+import NotificationSystem from './components/NotificationSystem';
 
 const AppContent: React.FC = () => {
   const { isLocked, circadian, theme } = useApp();
