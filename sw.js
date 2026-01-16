@@ -1,4 +1,3 @@
-
 /**
  * Lumina Service Worker
  * Handles background notifications and PWA features
@@ -9,6 +8,7 @@ self.addEventListener('install', (event) => {
 });
 
 self.addEventListener('activate', (event) => {
+  // Claim clients immediately so notifications work on the first visit
   event.waitUntil(clients.claim());
 });
 
@@ -35,6 +35,6 @@ self.addEventListener('push', (event) => {
 self.addEventListener('notificationclick', (event) => {
   event.notification.close();
   event.waitUntil(
-    clients.openWindow(event.notification.data.url)
+    clients.openWindow(event.notification.data.url || '/')
   );
 });

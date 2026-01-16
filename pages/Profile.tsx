@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp, THEMES } from '../context/AppContext';
 import { ThemeColor, AppLanguage } from '../types';
@@ -16,35 +15,41 @@ const LANGUAGES: AppLanguage[] = ['English', 'French', 'German', 'Ukrainian', 'S
 const AVATARS = ['🌱', '🌿', '🌳', '🚀', '🧠', '✨', '🧘', '🔥', '💎', '🌊', '☀️', '🌕'];
 
 export const Profile: React.FC = () => {
+    // 1. Context & Core State
     const { 
         name, avatar, theme, themeColor, language, themeClasses, 
         securitySettings, syncStatus, user, notificationSettings,
         updateUserPreferences, deleteAccount, t, setPinCode, 
-        syncWithCloud, signOut
+        syncWithCloud, signOut, triggerNotification
     } = useApp();
 
+    // 2. Refs
     const fileInputRef = useRef<HTMLInputElement>(null);
     const cropCanvasRef = useRef<HTMLCanvasElement>(null);
     const pinSectionRef = useRef<HTMLDivElement>(null);
     
+    // 3. UI State
     const [editingName, setEditingName] = useState(false);
     const [tempName, setTempName] = useState(name);
     const [showAuth, setShowAuth] = useState(false);
     const [isUploading, setIsUploading] = useState(false);
-    
     const [settingPin, setSettingPin] = useState(false);
     const [pinInput, setPinInput] = useState('');
     const [isTestingPush, setIsTestingPush] = useState(false);
 
-    // Auto-scroll to PIN input when enabled
-    useEffect(() => {
-        if (settingPin && pinSectionRef.current) {
-            setTimeout(() => {
-                pinSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
-            }, 300);
-        }
-    }, [settingPin]);
+    // 4. Crop Modal State
+    const [showCropModal, setShowCropModal] = useState(false);
+    const [selectedImgSrc, setSelectedImgSrc] = useState<string | null>(null);
+    const [zoom, setZoom] = useState(1);
+    const [offset, setOffset] = useState({ x: 0, y: 0 });
+    const [isDragging, setIsDragging] = useState(false);
+    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
+    // 5. Derived Values
+    const isImageAvatar = !!(avatar && (avatar.startsWith('data:image') || avatar.startsWith('http')));
+    const isStandalone = window.matchMedia('(display-mode: standalone)').matches || (window.navigator as any).standalone === true;
+
+    // 6. Handlers
     const handleEnableNotifications = async () => {
         const granted = await requestNotificationPermission();
         updateUserPreferences({
@@ -53,32 +58,30 @@ export const Profile: React.FC = () => {
                 enabled: granted
             }
         });
+        if (granted) {
+            triggerNotification("Access Granted", "Lumina can now reach you.", "achievement");
+        }
     };
 
     const handleTestPush = async () => {
         if (isTestingPush) return;
         setIsTestingPush(true);
-        
-        // Force reset the loading state after 3 seconds no matter what
-        const resetTimeout = setTimeout(() => setIsTestingPush(false), 3000);
-
+        if ('vibrate' in navigator) navigator.vibrate(50);
         try {
-            await sendSystemNotification("Lumina Mobile Test", {
-                body: "Your phone is now synced with your growth rituals! 🚀",
+            const success = await sendSystemNotification("Lumina Mobile Link", {
+                body: "Link Integrity Verified. Your phone is synced! 🚀",
                 tag: 'test-push'
             });
+            if (!success) {
+                triggerNotification("Link Active", "The system signal is live, but your browser is blocking the popup. Ensure you've added Lumina to your Home Screen!", "motivation");
+            }
         } catch (err) {
-            console.error("Test notification failed", err);
+            console.error("Test notification error:", err);
         } finally {
-            // Keep the spinner for at least 1.5 seconds for visual feedback
-            setTimeout(() => {
-                clearTimeout(resetTimeout);
-                setIsTestingPush(false);
-            }, 1500);
+            setTimeout(() => setIsTestingPush(false), 2000);
         }
     };
 
-    // Fixed: Corrected routineTimeline update to satisfy strict type checking and remove optional property inference
     const updateTimelineTime = (phase: 'Morning' | 'Afternoon' | 'Evening', time: string) => {
         if (!notificationSettings) return;
         updateUserPreferences({
@@ -114,16 +117,8 @@ export const Profile: React.FC = () => {
         }
     };
 
-    const [showCropModal, setShowCropModal] = useState(false);
-    const [selectedImgSrc, setSelectedImgSrc] = useState<string | null>(null);
-    const [zoom, setZoom] = useState(1);
-    const [offset, setOffset] = useState({ x: 0, y: 0 });
-    const [isDragging, setIsDragging] = useState(false);
-    const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
-
     const handleSaveCroppedImage = async () => {
         if (!selectedImgSrc || !cropCanvasRef.current) return;
-        
         setIsUploading(true);
         const canvas = cropCanvasRef.current;
         const ctx = canvas.getContext('2d');
@@ -135,10 +130,8 @@ export const Profile: React.FC = () => {
             const size = 400;
             canvas.width = size;
             canvas.height = size;
-
             const imgAspect = img.width / img.height;
             let drawW, drawH;
-
             if (imgAspect > 1) {
                 drawH = size * zoom;
                 drawW = drawH * imgAspect;
@@ -146,25 +139,17 @@ export const Profile: React.FC = () => {
                 drawW = size * zoom;
                 drawH = drawW / imgAspect;
             }
-
             const x = (size - drawW) / 2 + offset.x;
             const y = (size - drawH) / 2 + offset.y;
-
             ctx.drawImage(img, x, y, drawW, drawH);
-            
             const croppedDataUrl = canvas.toDataURL('image/jpeg', 0.85);
-
             if (user) {
                 const cloudUrl = await uploadImage('avatars', user.id, croppedDataUrl);
-                if (cloudUrl) {
-                    updateUserPreferences({ avatar: cloudUrl });
-                } else {
-                    updateUserPreferences({ avatar: croppedDataUrl });
-                }
+                if (cloudUrl) updateUserPreferences({ avatar: cloudUrl });
+                else updateUserPreferences({ avatar: croppedDataUrl });
             } else {
                 updateUserPreferences({ avatar: croppedDataUrl });
             }
-
             setIsUploading(false);
             setShowCropModal(false);
             setSelectedImgSrc(null);
@@ -191,8 +176,16 @@ export const Profile: React.FC = () => {
 
     const stopDragging = () => setIsDragging(false);
 
-    const isImageAvatar = avatar && (avatar.startsWith('data:image') || avatar.startsWith('http'));
+    // 7. Effects
+    useEffect(() => {
+        if (settingPin && pinSectionRef.current) {
+            setTimeout(() => {
+                pinSectionRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }, 300);
+        }
+    }, [settingPin]);
 
+    // 8. Helper Components (within scope)
     const renderToggle = (active: boolean, onToggle: () => void, label: string, icon?: React.ReactNode, subLabel?: string) => {
         return (
             <div className="flex items-center justify-between p-4 bg-slate-50/40 dark:bg-slate-800/20 rounded-2xl border border-slate-100 dark:border-slate-800 transition-all hover:bg-slate-50">
@@ -317,13 +310,18 @@ export const Profile: React.FC = () => {
                             className={`w-full py-3.5 rounded-xl font-black text-[9px] uppercase tracking-[0.2em] transition-all flex items-center justify-center gap-2 shadow-sm ${notificationSettings?.enabled ? `${themeClasses?.primary || 'bg-indigo-600'} text-white active:scale-95` : 'bg-slate-100 text-slate-300 opacity-50 cursor-not-allowed'}`}
                         >
                             {isTestingPush ? <Loader2 size={14} className="animate-spin" /> : <Smartphone size={14} />}
-                            {isTestingPush ? 'Testing...' : 'Send Test Nudge'}
+                            {isTestingPush ? 'Testing Signal...' : 'Send Test Nudge'}
                         </button>
                     </div>
 
-                    <p className="text-[9px] font-medium text-slate-400 text-center italic leading-relaxed px-4">
-                        Background alerts require <strong>Add to Home Screen</strong> on your mobile browser's share menu.
-                    </p>
+                    {!isStandalone && (
+                         <div className="bg-amber-50/50 dark:bg-amber-950/20 p-4 rounded-2xl border border-amber-100 dark:border-amber-900/30 flex gap-3">
+                            <ShieldAlert size={16} className="text-amber-500 shrink-0" />
+                            <p className="text-[9px] font-bold text-amber-700 dark:text-amber-300 leading-relaxed italic">
+                                <strong>Mobile Note:</strong> Background alerts are more reliable when you <strong>Add to Home Screen</strong> via your mobile browser's share menu.
+                            </p>
+                         </div>
+                    )}
                 </div>
             </div>
 
@@ -401,7 +399,7 @@ export const Profile: React.FC = () => {
                         theme === 'dark',
                         () => updateUserPreferences({ theme: theme === 'dark' ? 'light' : 'dark' }),
                         t('dark_mode'),
-                        < Moon size={16} />
+                        <Moon size={16} />
                     )}
                 </div>
             </div>
