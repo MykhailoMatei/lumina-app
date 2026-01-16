@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp, THEMES } from '../context/AppContext';
 import { ThemeColor, AppLanguage } from '../types';
@@ -40,6 +39,7 @@ export const Profile: React.FC = () => {
     const [zoom, setZoom] = useState(1);
     const [offset, setOffset] = useState({ x: 0, y: 0 });
     const [isDragging, setIsDragging] = useState(false);
+    // Fixed: Initialize dragStart with default values instead of undefined clientX/clientY
     const [dragStart, setDragStart] = useState({ x: 0, y: 0 });
 
     const isImageAvatar = !!(avatar && (avatar.startsWith('data:image') || avatar.startsWith('http')));
@@ -104,37 +104,59 @@ export const Profile: React.FC = () => {
             return;
         }
 
-        // 2. If currently disabled, try to turn it ON
-        // Check if the browser has permanently denied permission
-        if ('Notification' in window && Notification.permission === 'denied') {
-            triggerNotification("Permission Denied", "Notifications are blocked by your browser. Please reset site permissions in your browser settings.", "reminder");
+        // 2. Platform & Environment Pre-Checks
+        const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !(window as any).MSStream;
+        
+        // Check for Auth requirement
+        if (!user) {
+            triggerNotification("Identity Required", "Please 'Connect Account' in the Growth Vault below to enable remote notifications.", "reminder");
+            setShowAuth(true);
             return;
         }
 
-        const granted = await requestNotificationPermission();
+        // Check for Service Worker (Essential for Push)
+        if (!swActive) {
+            triggerNotification("System Initializing", "The background system (Service Worker) is not active. Please refresh the app or try 'Add to Home Screen'.", "reminder");
+            return;
+        }
+
+        const permissionState = await requestNotificationPermission();
         
-        if (granted) {
-            if (user) {
-                const sub = await subscribeToPush(user.id);
-                if (sub) setBackendSynced(true);
+        if (permissionState === 'unsupported') {
+            if (isIOS && !isStandalone) {
+                triggerNotification("iOS Integration", "On iPhone, you must 'Add to Home Screen' via the share menu to enable notifications.", "reminder");
+            } else {
+                triggerNotification("Not Supported", "Your browser does not support the Web Push API.", "reminder");
             }
+            return;
+        }
 
-            updateUserPreferences({
-                notificationSettings: {
-                    ...notificationSettings,
-                    enabled: true
-                }
-            });
+        if (permissionState === 'denied') {
+            triggerNotification("Access Denied", "Notifications are blocked in your browser settings. Please reset site permissions.", "reminder");
+            return;
+        }
 
-            triggerNotification("Access Granted", "Lumina can now reach you.", "achievement");
-            await sendSystemNotification("Lumina Linked", { body: "System alerts are now live! 🚀" });
-        } else {
-            triggerNotification("Action Required", "Lumina needs permission to send you growth nudges.", "reminder");
+        if (permissionState === 'granted') {
+            // Subscribe the user to the backend
+            const sub = await subscribeToPush(user.id);
+            if (sub) {
+                setBackendSynced(true);
+                updateUserPreferences({
+                    notificationSettings: {
+                        ...notificationSettings,
+                        enabled: true
+                    }
+                });
+                triggerNotification("Lumina Linked", "Remote signal active! You'll now receive growth nudges.", "achievement");
+                await sendSystemNotification("Connection Success", { body: "System alerts are now live! 🚀" });
+            } else {
+                triggerNotification("Sync Failed", "Could not link to the push network. Ensure you have a stable connection.", "reminder");
+            }
         }
     };
 
     const handleTestPush = async () => {
-        const isPermitted = await requestNotificationPermission();
+        const isPermitted = Notification.permission === 'granted';
         if (isTestingPush) return;
         setIsTestingPush(true);
         if ('vibrate' in navigator) navigator.vibrate(50);
@@ -260,7 +282,10 @@ export const Profile: React.FC = () => {
 
     // Calculate sub-label for push notifications
     const getNotificationStatus = () => {
-        if ('Notification' in window && Notification.permission === 'denied') return "Blocked by Browser";
+        if (!('Notification' in window)) return "API Unsupported";
+        if (Notification.permission === 'denied') return "Blocked by Browser";
+        if (!user) return "Login Required";
+        if (!swActive) return "System Pending Refresh";
         return notificationSettings?.enabled ? "Active Channel" : "Disabled";
     };
 
@@ -282,10 +307,10 @@ export const Profile: React.FC = () => {
                         <span className="font-bold text-white uppercase">Signal Diagnostics</span>
                         <X size={14} className="cursor-pointer" onClick={() => setShowDiagnostics(false)} />
                     </div>
-                    <div className="flex justify-between"><span>Display Mode:</span> <span>{isStandalone ? 'STANDALONE' : 'BROWSER'}</span></div>
-                    <div className="flex justify-between"><span>Service Worker:</span> <span>{swActive ? 'ACTIVE' : 'INACTIVE'}</span></div>
+                    <div className="flex justify-between"><span>Display Mode:</span> <span className={isStandalone ? 'text-emerald-400' : 'text-rose-400'}>{isStandalone ? 'STANDALONE' : 'BROWSER'}</span></div>
+                    <div className="flex justify-between"><span>Service Worker:</span> <span className={swActive ? 'text-emerald-400' : 'text-rose-400'}>{swActive ? 'ACTIVE' : 'INACTIVE'}</span></div>
                     <div className="flex justify-between"><span>Supabase Push:</span> <span className={user ? 'text-emerald-400' : 'text-rose-400'}>{user ? 'ENABLED' : 'AUTH REQUIRED'}</span></div>
-                    <div className="flex justify-between"><span>Permission:</span> <span>{Notification.permission.toUpperCase()}</span></div>
+                    <div className="flex justify-between"><span>Permission:</span> <span className={Notification.permission === 'granted' ? 'text-emerald-400' : 'text-rose-400'}>{Notification.permission.toUpperCase()}</span></div>
                     <div className="flex justify-between"><span>Haptic Engine:</span> <span>{'vibrate' in navigator ? 'READY' : 'N/A'}</span></div>
                     <div className="mt-4 p-3 bg-white/5 rounded-xl text-white/60 leading-relaxed italic">
                         {isStandalone 

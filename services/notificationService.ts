@@ -1,3 +1,4 @@
+
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
 
 /**
@@ -22,16 +23,19 @@ function urlBase64ToUint8Array(base64String: string) {
     return outputArray;
 }
 
-export const requestNotificationPermission = async (): Promise<boolean> => {
-    if (!('Notification' in window)) return false;
-    if (Notification.permission === 'granted') return true;
+export type PermissionResult = 'granted' | 'denied' | 'unsupported' | 'prompt';
+
+export const requestNotificationPermission = async (): Promise<PermissionResult> => {
+    if (!('Notification' in window)) return 'unsupported';
+    if (Notification.permission === 'granted') return 'granted';
+    if (Notification.permission === 'denied') return 'denied';
     
     try {
         const permission = await Notification.requestPermission();
-        return permission === 'granted';
+        return permission as PermissionResult;
     } catch (e) {
         console.error("Permission request failed", e);
-        return false;
+        return 'denied';
     }
 };
 
