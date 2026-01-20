@@ -93,50 +93,80 @@ export const generateGrowthAudit = async (
     const ai = getAiClient();
     const isEarlyStage = goals.length <= 1 && habits.length === 0 && journal.length === 0;
     
-    // Improved context to include specific completion dates for the AI to see progress
-    const today = new Date().toISOString().split('T')[0];
-    const habitData = habits.length > 0 ? habits.map(h => {
-        const recentCompletions = h.completedDates.filter(d => {
-            const diff = (new Date(today).getTime() - new Date(d).getTime()) / (1000 * 3600 * 24);
-            return diff <= 7;
-        }).length;
-        return `${h.title} (Streak: ${h.streak}, Done ${recentCompletions}/7 last days)`;
-    }).join(', ') : "None tracked yet";
+    const now = new Date();
     
-    const journalData = journal.length > 0 ? journal.slice(0, 10).map(j => `[Date: ${j.date.split('T')[0]}, Mood: ${j.mood}] ${j.content.substring(0, 100)}`).join('; ') : "None written yet";
+    // Create a detailed map of daily habit activity for the AI
+    const habitData = habits.length > 0 ? habits.map(h => {
+        // Explicitly typed as string[] to fix the 'never' assignment error
+        const last7Days: string[] = []; 
+        for(let i=0; i<7; i++) {
+            const d = new Date(now);
+            d.setDate(now.getDate() - i);
+            const dStr = d.toISOString().split('T')[0];
+            last7Days.push(h.completedDates.includes(dStr) ? '✅' : '❌');
+        }
+        return `${h.title}: [Today..7daysAgo: ${last7Days.join('')}] Streak: ${h.streak}`;
+    }).join('\n') : "No rituals established.";
+    
+    const journalData = journal.length > 0 ? journal.slice(0, 7).map(j => {
+        const entryDate = new Date(j.date);
+        const daysAgo = Math.floor((now.getTime() - entryDate.getTime()) / (1000 * 3600 * 24));
+        return `[${daysAgo} days ago | Mood: ${j.mood}] ${j.content.substring(0, 150)}...`;
+    }).join('\n') : "No reflections written.";
     
     const context = `
-    PHASE: ${isEarlyStage ? 'SEEDING_PHASE' : 'ACTIVE_GROWTH'}
-    Current Date: ${today}
-    Habit Status: ${habitData}
-    Journal History: ${journalData}
-    Active Goals: ${goals.map(g => `${g.title} (${g.category}, Progress: ${g.progress}%)`).join(', ')}
+    DETERMINISTIC CURRENT TIME: ${now.toLocaleString()}
+    NEURAL_SEED: ${Math.random().toString(36).substring(7)}
+    USER_IDENTITY: Growth Traveler
+    
+    HABIT_CHRONOLOGY (Last 7 Days):
+    ${habitData}
+    
+    REFLECTION_CHRONOLOGY (Last 7 Entries):
+    ${journalData}
+    
+    STRATEGIC_GOALS:
+    ${goals.map(g => `- ${g.title} (${g.category}, Progress: ${g.progress}%)`).join('\n')}
     `;
 
-    const prompt = `${getLangInstr(lang)} Analyze growth data. 
+    const prompt = `${getLangInstr(lang)} 
+    You are the "Lumina Growth Architect". Analyze the behavior delta.
     
-    CRITICAL TONE GUIDE:
-    - If user is in SEEDING_PHASE, be encouraging and simple.
-    - If user has recent activity (last 48 hours), acknowledge the specific progress in the 'summary'.
+    STRICT INSTRUCTION:
+    1. Acknowledge SPECIFIC changes in habits/journal from the last 24-48 hours.
+    2. If the user is consistently checking habits, reflect a POSITIVE shift in the identityScores.
+    3. Ensure the archetype and mentalThemes evolve based on current entries.
     
-    MANDATORY JSON:
-    - summary: Warm overview acknowledging specific recent actions.
-    - correlation: How their goals match their actions.
-    - advice: One actionable next step.
-    - trajectory: Future outlook.
-    - archetype: string
-    - happinessTrigger: A psychological "win".
-    - mentalThemes: Array of 3 themes.
-    - identityScores: Array of 6 objects { subject: string, A: number, fullMark: 100 }.
-    - isCalibrating: boolean.
+    MANDATORY JSON FORMAT:
+    {
+      "summary": "Overview of recent behavioral shifts.",
+      "correlation": "Analysis of ritual sync with goals.",
+      "advice": "Actionable adjustment.",
+      "trajectory": "Outlook based on current momentum.",
+      "archetype": "Dynamic identity title.",
+      "happinessTrigger": "A psychological win to celebrate.",
+      "mentalThemes": ["3 core keywords"],
+      "identityScores": [
+          {"subject": "Health", "A": 0-100, "fullMark": 100},
+          {"subject": "Career", "A": 0-100, "fullMark": 100},
+          {"subject": "Creativity", "A": 0-100, "fullMark": 100},
+          {"subject": "Learning", "A": 0-100, "fullMark": 100},
+          {"subject": "Personal", "A": 0-100, "fullMark": 100},
+          {"subject": "Financial", "A": 0-100, "fullMark": 100}
+      ],
+      "isCalibrating": boolean
+    }
 
-    Context: ${context}`;
+    CONTEXT: ${context}`;
 
     try {
         const res: GenerateContentResponse = await ai.models.generateContent({
             model: 'gemini-3-pro-preview',
             contents: prompt,
-            config: { responseMimeType: "application/json" }
+            config: { 
+                responseMimeType: "application/json",
+                temperature: 0.95 // High temperature to ensure variety
+            }
         });
         const parsed = JSON.parse(res.text || "{}");
         return {
@@ -212,6 +242,6 @@ export const generateEntryInsight = async (content: string, mood: string, goalTi
   if (imageData) parts.push({ inlineData: { data: imageData.split(',')[1], mimeType: imageData.split(';')[0].split(':')[1] } });
   try {
     const res = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: { parts }, config: { responseMimeType: "application/json" } });
-    return JSON.parse(res.text || "{}").insight || " মাস্টারি বা দক্ষতা অর্জনের দিকে প্রতিফলন প্রথম পদক্ষেপ।";
+    return JSON.parse(res.text || "{}").insight || " reflecting on your journey is the first step toward mastery.";
   } catch { return "Reflecting on your journey is the first step toward mastery."; }
 };

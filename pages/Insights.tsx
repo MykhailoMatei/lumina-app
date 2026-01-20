@@ -1,5 +1,5 @@
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
     ComposedChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, 
@@ -10,7 +10,7 @@ import {
     ArrowUpRight, Loader2, Sunset, Sun, Coffee, 
     Flame, LayoutGrid, Heart, Fingerprint, Waves, Info,
     Lock, Sprout, PenLine, ChevronRight, BookOpen, PlusCircle,
-    Check
+    Check, RefreshCw, Clock
 } from 'lucide-react';
 import { generateGrowthAudit } from '../services/geminiService';
 
@@ -28,36 +28,40 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
   const [audit, setAudit] = useState<any>(null);
   const [loadingAudit, setLoadingAudit] = useState(false);
   const [showThemeHelp, setShowThemeHelp] = useState(false);
+  const [lastAuditTime, setLastAuditTime] = useState<string | null>(localStorage.getItem('lumina_last_audit_time'));
 
   const accentHex = THEME_HEX_MAP[themeColor || 'indigo'] || '#6366f1';
 
   const hasHabits = habits.length > 0;
   const hasJournal = journalEntries.length > 0;
   const hasGoals = goals.length > 0;
-  const hasSync = hasHabits && hasJournal;
   const hasAnyData = hasHabits || hasJournal || hasGoals;
 
-  // Track habit completions by creating a string representation of the data
-  // This ensures that completing a habit triggers a re-fetch if the user visits this page
-  const habitCompletionKey = JSON.stringify(habits.map(h => ({ id: h.id, streak: h.streak, count: h.completedDates.length })));
+  const fetchAudit = useCallback(async () => {
+    if (!hasAnyData) return;
+    setLoadingAudit(true);
+    try {
+        const res = await generateGrowthAudit(habits, goals, journalEntries, language);
+        setAudit(res);
+        const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        setLastAuditTime(nowStr);
+        localStorage.setItem('lumina_last_audit_time', nowStr);
+    } catch (e) {
+        console.error("Audit failed", e);
+    } finally {
+        setLoadingAudit(false);
+    }
+  }, [habits, goals, journalEntries, language, hasAnyData]);
+
+  // Track state changes deeply to trigger auto-refresh when arriving at the page
+  // We include a 'today' string to force a refresh if the date changes
+  const todayStr = new Date().toISOString().split('T')[0];
+  const habitCompletionKey = JSON.stringify(habits.map(h => ({ id: h.id, streak: h.streak, dates: h.completedDates.slice(-7) })));
   const journalKey = JSON.stringify(journalEntries.map(j => ({ id: j.id, mood: j.mood })));
 
   useEffect(() => {
-    if (!hasAnyData) return;
-
-    const fetchAudit = async () => {
-        setLoadingAudit(true);
-        try {
-            const res = await generateGrowthAudit(habits, goals, journalEntries, language);
-            setAudit(res);
-        } catch (e) {
-            console.error("Audit failed", e);
-        } finally {
-            setLoadingAudit(false);
-        }
-    };
     fetchAudit();
-  }, [habitCompletionKey, journalKey, goals.length, timeframe, hasAnyData, language]);
+  }, [habitCompletionKey, journalKey, goals.length, language, todayStr]);
 
   const momentumGrid = useMemo(() => {
     const daysCount = 35;
@@ -162,12 +166,6 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                             {!hasJournal && <PlusCircle size={14} className="text-slate-300" />}
                         </button>
                     </div>
-
-                    <div className="pt-2">
-                        <p className="text-[9px] font-black uppercase tracking-widest text-slate-300 animate-pulse">
-                            Awaiting Signal to Unlock
-                        </p>
-                    </div>
                 </div>
             </div>
         </div>
@@ -183,23 +181,33 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                       <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">
                         {audit?.archetype || 'Analyzing Identity...'}
                       </p>
-                      {audit?.isCalibrating && (
-                        <div className="bg-amber-500/10 text-amber-500 text-[8px] font-black px-1.5 py-0.5 rounded-md uppercase tracking-widest border border-amber-500/20">
-                            Calibrating
-                        </div>
-                      )}
+                      <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
+                          <Clock size={10} className="text-slate-400" />
+                          <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">
+                              Last Audit: {lastAuditTime || 'Calculating...'}
+                          </span>
+                      </div>
                   </div>
               </div>
-              <div className="bg-white dark:bg-slate-900 p-1 rounded-2xl border border-slate-100 dark:border-slate-800 flex shadow-sm">
-                  {(['Week', 'Month'] as const).map(t => (
-                      <button 
-                        key={t}
-                        onClick={() => setTimeframe(t)}
-                        className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${timeframe === t ? `${themeClasses.primary} text-white shadow-lg` : 'text-slate-400'}`}
-                      >
-                          {t}
-                      </button>
-                  ))}
+              <div className="flex gap-2">
+                  <button 
+                      onClick={fetchAudit}
+                      disabled={loadingAudit}
+                      className={`p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-all active:scale-90 ${loadingAudit ? 'opacity-50' : ''}`}
+                  >
+                      <RefreshCw size={16} className={`${loadingAudit ? 'animate-spin' : ''} text-slate-400`} />
+                  </button>
+                  <div className="bg-white dark:bg-slate-900 p-1 rounded-2xl border border-slate-100 dark:border-slate-800 flex shadow-sm">
+                      {(['Week', 'Month'] as const).map(t => (
+                          <button 
+                            key={t}
+                            onClick={() => setTimeframe(t)}
+                            className={`px-4 py-1.5 rounded-xl text-[9px] font-black uppercase tracking-widest transition-all ${timeframe === t ? `${themeClasses.primary} text-white shadow-lg` : 'text-slate-400'}`}
+                          >
+                              {t}
+                          </button>
+                      ))}
+                  </div>
               </div>
           </header>
 
@@ -265,33 +273,30 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                         </div>
                     )}
                 </div>
-
-                <div className="mt-6 pt-6 border-t border-slate-50 dark:border-slate-800/50">
-                    <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 italic leading-relaxed">
-                        IDENTITY RESONANCE correlates your <span className={themeClasses.text}>Active Goals</span> (where you intend to grow) with your <span className={themeClasses.text}>Habit Execution</span> (where you actually spend energy). The more balanced the shape, the more integrated your life dimensions.
-                    </p>
-                </div>
           </div>
 
           <div className="relative p-8 rounded-[3.5rem] bg-white dark:bg-slate-900 overflow-hidden shadow-sm border border-slate-100 dark:border-slate-800 group">
                 <div className="relative z-10 space-y-6">
-                    <div className="flex items-center gap-2">
-                        <div className={`w-10 h-10 rounded-2xl ${themeClasses.secondary} flex items-center justify-center`}>
-                            <Brain size={20} className={themeClasses.text} />
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <div className={`w-10 h-10 rounded-2xl ${themeClasses.secondary} flex items-center justify-center`}>
+                                <Brain size={20} className={themeClasses.text} />
+                            </div>
+                            <div>
+                                <h2 className="text-slate-800 dark:text-white font-black text-sm uppercase tracking-wider">Growth Strategist</h2>
+                                <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">Tailored AI Guidance</p>
+                            </div>
                         </div>
-                        <div>
-                            <h2 className="text-slate-800 dark:text-white font-black text-sm uppercase tracking-wider">Growth Strategist</h2>
-                            <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">Tailored AI Guidance</p>
-                        </div>
+                        {loadingAudit && <div className="text-[8px] font-black uppercase text-slate-400 animate-pulse">Analyzing delta...</div>}
                     </div>
 
-                    {loadingAudit ? (
+                    {loadingAudit && !audit ? (
                         <div className="space-y-3 py-2">
                             <div className="h-4 w-full bg-slate-50 dark:bg-slate-800 rounded-full animate-pulse" />
                             <div className="h-4 w-3/4 bg-slate-50 dark:bg-slate-800 rounded-full animate-pulse" />
                         </div>
                     ) : (
-                        <div className="space-y-6">
+                        <div className={`space-y-6 transition-opacity ${loadingAudit ? 'opacity-50' : 'opacity-100'}`}>
                             <div className="p-5 bg-slate-50/50 dark:bg-slate-800/40 rounded-3xl border border-slate-100 dark:border-slate-800/50 flex gap-4">
                                 <div className="w-10 h-10 rounded-full bg-rose-500/10 flex items-center justify-center shrink-0 border border-rose-500/20">
                                     <Heart size={18} className="text-rose-400" />
@@ -348,19 +353,10 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                           />
                       ))}
                   </div>
-                  
-                  <div className="mt-8 pt-6 border-t border-slate-50 dark:border-slate-800/50">
-                      <div className="flex items-start gap-3">
-                          <Info size={14} className="text-slate-300 shrink-0 mt-0.5" />
-                          <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 italic leading-relaxed">
-                              MOMENTUM DENSITY visualizes ritual execution over 35 days. Color intensity represents percentage completion, mapping the architecture of your discipline.
-                          </p>
-                      </div>
-                  </div>
             </div>
           )}
 
-          {hasSync && (
+          {hasJournal && hasHabits && (
             <div className="bg-white dark:bg-slate-900 p-8 rounded-[3.5rem] border border-slate-100 dark:border-slate-800 shadow-sm animate-in slide-in-from-bottom-6">
                   <div className="flex justify-between items-start mb-6">
                       <div>
@@ -387,15 +383,6 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                               <Scatter dataKey="perfectScore" fill="#f59e0b" stroke="#fff" strokeWidth={2} />
                           </ComposedChart>
                       </ResponsiveContainer>
-                  </div>
-                  
-                  <div className="mt-4 pt-6 border-t border-slate-50 dark:border-slate-800/50">
-                      <div className="flex items-start gap-3">
-                          <Info size={14} className="text-slate-300 shrink-0 mt-0.5" />
-                          <p className="text-[8px] font-bold text-slate-400 dark:text-slate-500 italic leading-relaxed">
-                              DISCIPLINE SYNC maps the intersection of mood and output. Gold markers signify "Total Alignment" days.
-                          </p>
-                      </div>
                   </div>
             </div>
           )}
