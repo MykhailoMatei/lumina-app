@@ -1,51 +1,46 @@
-
 import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App';
 
 /**
  * Robust Service Worker Registration
- * Handles mobile environments and immediate activation.
+ * Mobile PWAs sometimes need a relative path to find the script.
  */
 const registerServiceWorker = async () => {
   if (!('serviceWorker' in navigator)) return;
 
   try {
-    // Ensuring we use the root sw.js
-    const swPath = '/sw.js';
+    // Using relative path for maximum compatibility on mobile containers
+    const swPath = './sw.js';
     
     const registration = await navigator.serviceWorker.register(swPath, {
-      scope: '/'
+      scope: './'
     });
     
-    console.log('Lumina SW registered:', registration.scope);
+    console.log('Lumina Core registered:', registration.scope);
 
-    // If there is a worker waiting, tell it to skip waiting and activate
     if (registration.waiting) {
       registration.waiting.postMessage({ type: 'SKIP_WAITING' });
     }
 
-    // Standard update check
+    // Force an update check to ensure we have the latest core
     registration.update();
 
   } catch (err: any) {
-    console.warn('SW registration skipped or failed:', err.message);
+    console.warn('Lumina Core initialization skipped:', err.message);
   }
 };
 
-// Initiate registration immediately
+// Start registration immediately
 registerServiceWorker();
 
-// Handle SW controller changes to sync UI state
+// If the SW takes over after the app has loaded, notify the log
 if ('serviceWorker' in navigator) {
   navigator.serviceWorker.addEventListener('controllerchange', () => {
-    console.log('Service Worker controller changed. App is now controlled.');
-    // We don't necessarily need a reload if the app is designed to be reactive,
-    // but it helps ensure the new SW is managing all requests.
+    console.log('Lumina Core has claimed control of the session.');
   });
 }
 
-// Main App Mounting
 const rootElement = document.getElementById('root');
 if (!rootElement) {
   throw new Error("Could not find root element to mount to");

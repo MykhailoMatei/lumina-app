@@ -1,9 +1,9 @@
 
-import React, { useState, useEffect, useMemo, useRef } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { useApp } from '../context/AppContext';
 import { 
     Check, Sun, Moon, Clock, Sparkles, Trophy, 
-    ChevronDown, ChevronUp, Zap, Star, Plus, X, ArrowRight, Loader2, Coffee, Sunset, Target, Play, Pencil, Trash2, RefreshCw, Flame, Cloud, CloudOff, History
+    ChevronDown, ChevronUp, Zap, Star, Plus, X, ArrowRight, Loader2, Coffee, Sunset, Target, Play, Pencil, Trash2, RefreshCw, Flame, Cloud, CloudOff, History, Calendar
 } from 'lucide-react';
 import { generateDailyBriefing, suggestAtomicHabit } from '../services/geminiService';
 import { Habit } from '../types';
@@ -17,7 +17,11 @@ interface MomentumDay {
     dayNum: number;
     dayName: string;
     isToday: boolean;
+    dayOfWeek: number;
 }
+
+const getTodayString = () => new Date().toISOString().split('T')[0];
+const DAYS_OF_WEEK = ['S', 'M', 'T', 'W', 'T', 'F', 'S'];
 
 export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
     const { 
@@ -26,29 +30,50 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
         updateUserPreferences, circadian, syncStatus, user
     } = useApp();
     
-    const todayStr = new Date().toISOString().split('T')[0];
-    const [selectedDate, setSelectedDate] = useState(todayStr);
+    // Reactive Today State: Handles date turnover while app is in memory
+    const [currentTodayStr, setCurrentTodayStr] = useState(getTodayString());
+    const [selectedDate, setSelectedDate] = useState(currentTodayStr);
+    
     const [isMomentumOpen, setIsMomentumOpen] = useState(false);
     const [isBriefingExpanded, setIsBriefingExpanded] = useState(false);
     const [showHabitModal, setShowHabitModal] = useState(false);
     const [editingHabitId, setEditingHabitId] = useState<string | null>(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
 
+    // Heartbeat to detect midnight turnover
+    useEffect(() => {
+        const interval = setInterval(() => {
+            const freshToday = getTodayString();
+            if (freshToday !== currentTodayStr) {
+                console.log("Date turnover detected. Refreshing momentum ribbon...");
+                setCurrentTodayStr(freshToday);
+                // Optionally move user to the new 'Today' if they were looking at the old 'Today'
+                if (selectedDate === currentTodayStr) {
+                    setSelectedDate(freshToday);
+                }
+            }
+        }, 30000); // Check every 30 seconds
+        return () => clearInterval(interval);
+    }, [currentTodayStr, selectedDate]);
+
     // Generate last 7 days for the Momentum Ribbon
     const momentumDays = useMemo(() => {
         const days: MomentumDay[] = [];
+        const baseDate = new Date();
         for (let i = 6; i >= 0; i--) {
-            const d = new Date();
-            d.setDate(d.getDate() - i);
+            const d = new Date(baseDate);
+            d.setDate(baseDate.getDate() - i);
+            const iso = d.toISOString().split('T')[0];
             days.push({
-                full: d.toISOString().split('T')[0],
+                full: iso,
                 dayNum: d.getDate(),
                 dayName: d.toLocaleDateString(undefined, { weekday: 'short' }).charAt(0),
-                isToday: d.toISOString().split('T')[0] === todayStr
+                isToday: iso === currentTodayStr,
+                dayOfWeek: d.getDay()
             });
         }
         return days;
-    }, [todayStr]);
+    }, [currentTodayStr]);
 
     const currentHour = new Date().getHours();
     const initialTab = useMemo(() => {
@@ -67,16 +92,36 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
     const [habitTime, setHabitTime] = useState<'Morning' | 'Afternoon' | 'Evening' | 'Anytime'>(initialTab);
     const [linkedGoalId, setLinkedGoalId] = useState('');
     const [isAtomizing, setIsAtomizing] = useState(false);
+    const [habitDays, setHabitDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
+
+    /**
+     * HISTORICAL & RECURRENCE FILTERING LOGIC
+     * 1. Check if habit was created on/before selectedDate
+     * 2. Check if selectedDate's day of week is in h.daysOfWeek
+     */
+    const getHabitsForSelectedDate = useCallback(() => {
+        const d = new Date(selectedDate);
+        const dayOfWeek = d.getDay();
+        
+        return habits.filter(h => {
+            const createdDateStr = h.createdAt.split('T')[0];
+            const isHistoricalValid = createdDateStr <= selectedDate;
+            const isScheduledForDay = h.daysOfWeek.includes(dayOfWeek);
+            return isHistoricalValid && isScheduledForDay;
+        });
+    }, [habits, selectedDate]);
+
+    const habitsForDay = useMemo(() => getHabitsForSelectedDate(), [getHabitsForSelectedDate]);
 
     const nextAction = useMemo(() => {
-        const pendingHabits = habits.filter(h => !h.completedDates.includes(selectedDate));
+        const pendingHabits = habitsForDay.filter(h => !h.completedDates.includes(selectedDate));
         if (pendingHabits.length === 0) return null;
         const currentPhaseHabits = pendingHabits.filter(h => h.timeOfDay === initialTab);
         if (currentPhaseHabits.length > 0) return currentPhaseHabits[0];
         const anytimeHabits = pendingHabits.filter(h => h.timeOfDay === 'Anytime');
         if (anytimeHabits.length > 0) return anytimeHabits[0];
         return pendingHabits[0];
-    }, [habits, selectedDate, initialTab]);
+    }, [habitsForDay, selectedDate, initialTab]);
 
     const phaseIcon = useMemo(() => {
         switch(circadian.state) {
@@ -103,12 +148,12 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
         const checkBriefingStaleness = () => {
             const lastUpdate = lastBriefingUpdate ? new Date(lastBriefingUpdate) : null;
             const lastUpdateDateStr = lastUpdate ? lastUpdate.toISOString().split('T')[0] : null;
-            if (lastUpdateDateStr !== todayStr) {
+            if (lastUpdateDateStr !== currentTodayStr) {
                 fetchBriefing();
             }
         };
         checkBriefingStaleness();
-    }, [todayStr, language]);
+    }, [currentTodayStr, language]);
 
     const handleAtomize = async () => {
         if (!habitTitle.trim()) return;
@@ -125,6 +170,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
         setHabitTime(initialTab);
         setLinkedGoalId('');
         setEditingHabitId(null);
+        setHabitDays([0, 1, 2, 3, 4, 5, 6]);
         setShowHabitModal(false);
     };
 
@@ -135,12 +181,17 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
         setHabitDuration(h.duration || '5m');
         setHabitTime(h.timeOfDay);
         setLinkedGoalId(h.linkedGoalId || '');
+        setHabitDays(h.daysOfWeek || [0, 1, 2, 3, 4, 5, 6]);
         setShowHabitModal(true);
     };
 
     const handleSaveHabit = (e: React.FormEvent) => {
         e.preventDefault();
         if (!habitTitle.trim()) return;
+        if (habitDays.length === 0) {
+            alert("Please select at least one day for this ritual.");
+            return;
+        }
         
         if (editingHabitId) {
             updateHabit(editingHabitId, {
@@ -148,6 +199,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                 trigger: habitTrigger,
                 duration: habitDuration,
                 timeOfDay: habitTime,
+                daysOfWeek: habitDays,
                 linkedGoalId: linkedGoalId || undefined
             });
         } else {
@@ -157,6 +209,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                 trigger: habitTrigger,
                 duration: habitDuration,
                 timeOfDay: habitTime,
+                daysOfWeek: habitDays,
                 linkedGoalId: linkedGoalId || undefined,
                 streak: 0,
                 completedDates: []
@@ -172,13 +225,21 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
         }
     };
 
-    const filteredHabits = habits.filter(h => h.timeOfDay === activeHabitTab);
-    const progress = habits.length > 0 ? Math.round((habits.filter(h => h.completedDates.includes(selectedDate)).length / habits.length) * 100) : 0;
+    const filteredHabits = habitsForDay.filter(h => h.timeOfDay === activeHabitTab);
+    const progress = habitsForDay.length > 0 ? Math.round((habitsForDay.filter(h => h.completedDates.includes(selectedDate)).length / habitsForDay.length) * 100) : 0;
 
     const getTabStats = (time: string) => {
-        const set = habits.filter(h => h.timeOfDay === time);
+        const set = habitsForDay.filter(h => h.timeOfDay === time);
         const done = set.filter(h => h.completedDates.includes(selectedDate)).length;
         return { count: set.length, done };
+    };
+
+    const toggleDay = (dayNum: number) => {
+        setHabitDays(prev => 
+            prev.includes(dayNum) 
+                ? prev.filter(d => d !== dayNum) 
+                : [...prev, dayNum].sort()
+        );
     };
 
     return (
@@ -231,7 +292,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                     </div>
                                     <div className="text-left">
                                         <p className="text-[8px] font-black uppercase tracking-[0.15em] opacity-40">
-                                            {selectedDate === todayStr ? 'START ROUTINE' : 'BACKDATE COMPLETION'}
+                                            {selectedDate === currentTodayStr ? 'START ROUTINE' : 'BACKDATE COMPLETION'}
                                         </p>
                                         <h4 className="text-sm font-black truncate max-w-[180px]">
                                             {nextAction.title} <span className="opacity-40 ml-1 text-[10px]">({nextAction.duration || '5m'})</span>
@@ -320,9 +381,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                             </button>
                         </div>
                         <div className="flex items-center gap-3">
-                            {selectedDate !== todayStr && {isMomentumOpen} && (
+                            {selectedDate !== currentTodayStr && isMomentumOpen && (
                                 <button 
-                                    onClick={() => setSelectedDate(todayStr)} 
+                                    onClick={() => setSelectedDate(currentTodayStr)} 
                                     className={`text-[8px] font-black uppercase tracking-[0.2em] ${themeClasses.text} animate-in fade-in slide-in-from-right-2`}
                                 >
                                     Return Today
@@ -340,9 +401,14 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                             <div className="flex justify-start gap-4 overflow-x-auto no-scrollbar py-1 px-1 snap-x pr-10">
                                 {momentumDays.map((day) => {
                                     const isSelected = selectedDate === day.full;
-                                    const habitsForDay = habits.length;
-                                    const doneForDay = habits.filter(h => h.completedDates.includes(day.full)).length;
-                                    const isComplete = habitsForDay > 0 && doneForDay === habitsForDay;
+                                    // Accurate check for that specific date in the past
+                                    const activeHabitsForDay = habits.filter(h => 
+                                        h.createdAt.split('T')[0] <= day.full && 
+                                        h.daysOfWeek.includes(day.dayOfWeek)
+                                    );
+                                    const habitsCount = activeHabitsForDay.length;
+                                    const doneForDay = activeHabitsForDay.filter(h => h.completedDates.includes(day.full)).length;
+                                    const isComplete = habitsCount > 0 && doneForDay === habitsCount;
 
                                     return (
                                         <button
@@ -374,7 +440,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                         {(['Morning', 'Afternoon', 'Evening', 'Anytime'] as const).map(time => {
                             const stats = getTabStats(time);
                             const isActive = activeHabitTab === time;
-                            const isCurrentTime = initialTab === time && selectedDate === todayStr;
+                            const isCurrentTime = initialTab === time && selectedDate === currentTodayStr;
                             
                             return (
                                 <button
@@ -405,9 +471,11 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                     <div className="space-y-3 min-h-[150px]">
                         {filteredHabits.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-12 text-slate-400 gap-3 border-2 border-dashed border-slate-200/20 dark:border-white/5 rounded-[2.5rem] bg-slate-50/10 dark:bg-white/[0.01]">
-                                <Plus size={24} className="opacity-10" />
-                                <p className="text-[10px] font-black uppercase tracking-widest opacity-30">No {activeHabitTab} Rituals</p>
-                                <button onClick={() => { setEditingHabitId(null); setHabitTime(activeHabitTab); setShowHabitModal(true); }} className={`text-[9px] font-black uppercase tracking-widest ${themeClasses.text} opacity-80 hover:opacity-100 transition-opacity`}>Add One Now</button>
+                                <Calendar size={24} className="opacity-10" />
+                                <p className="text-[10px] font-black uppercase tracking-widest opacity-30 text-center">
+                                  {habitsForDay.length === 0 ? 'No Rituals Scheduled' : `No ${activeHabitTab} Rituals Today`}
+                                </p>
+                                <button onClick={() => { setEditingHabitId(null); setHabitTime(activeHabitTab); setShowHabitModal(true); }} className={`text-[9px] font-black uppercase tracking-widest ${themeClasses.text} opacity-80 hover:opacity-100 transition-opacity`}>Schedule One</button>
                             </div>
                         ) : (
                             filteredHabits.sort((a, b) => {
@@ -487,10 +555,9 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                 </div>
             </div>
 
-            {/* CREATE/EDIT HABIT MODAL - Moved outside to fix full-screen blur gap */}
+            {/* CREATE/EDIT HABIT MODAL */}
             {showHabitModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center animate-in fade-in duration-300">
-                    {/* Hard-cover fixed backdrop covering the entire viewport overflow */}
                     <div 
                         className="fixed -inset-[100px] bg-slate-950/40 backdrop-blur-2xl" 
                         onClick={resetHabitForm} 
@@ -505,10 +572,10 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                             <h2 className="text-2xl font-black text-slate-800 dark:text-white tracking-tighter">
                                 {editingHabitId ? 'Edit Ritual' : 'New Ritual'}
                             </h2>
-                            <p className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400 mt-1">Define Your Daily Discipline</p>
+                            <p className="text-[9px] font-black uppercase tracking-[0.25em] text-slate-400 mt-1">Define Your Frequency</p>
                         </div>
 
-                        <form onSubmit={handleSaveHabit} className="space-y-8 flex-1 overflow-y-auto no-scrollbar pr-1 pb-4">
+                        <form onSubmit={handleSaveHabit} className="space-y-6 flex-1 overflow-y-auto no-scrollbar pr-1 pb-4">
                             <div className="space-y-6">
                                 <div className="space-y-4">
                                     <div className="flex items-center gap-3">
@@ -540,14 +607,31 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                             </button>
                                         </div>
                                     </div>
-                                    <div className="flex items-center gap-3">
-                                        <Clock className="text-slate-200 shrink-0" size={16} />
-                                        <input 
-                                            value={habitDuration}
-                                            onChange={e => setHabitDuration(e.target.value)}
-                                            placeholder="Duration (e.g. 5m, 1h)"
-                                            className="w-full bg-slate-50 dark:bg-slate-800 rounded-xl px-4 py-3 text-sm font-bold border-none outline-none focus:ring-2 focus:ring-indigo-500/10 dark:text-white"
-                                        />
+
+                                    {/* DAY FREQUENCY SELECTOR */}
+                                    <div className="space-y-3 pt-2">
+                                        <div className="flex justify-between items-center px-1">
+                                            <label className="text-[8px] font-black uppercase text-slate-400 tracking-[0.2em]">Frequency</label>
+                                            <button 
+                                                type="button"
+                                                onClick={() => setHabitDays(habitDays.length === 7 ? [] : [0,1,2,3,4,5,6])}
+                                                className={`text-[8px] font-black uppercase tracking-widest ${themeClasses.text}`}
+                                            >
+                                                {habitDays.length === 7 ? 'Clear All' : 'Select Daily'}
+                                            </button>
+                                        </div>
+                                        <div className="flex justify-between items-center gap-1.5">
+                                            {DAYS_OF_WEEK.map((day, i) => (
+                                                <button
+                                                    key={i}
+                                                    type="button"
+                                                    onClick={() => toggleDay(i)}
+                                                    className={`w-9 h-9 rounded-xl text-[10px] font-black transition-all flex items-center justify-center border ${habitDays.includes(i) ? `${themeClasses.primary} text-white border-transparent shadow-md` : 'bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700 text-slate-300'}`}
+                                                >
+                                                    {day}
+                                                </button>
+                                            ))}
+                                        </div>
                                     </div>
                                 </div>
 
@@ -582,7 +666,7 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                             <div className="space-y-3 pt-4">
                                 <button 
                                     type="submit" 
-                                    disabled={!habitTitle.trim()}
+                                    disabled={!habitTitle.trim() || habitDays.length === 0}
                                     className={`w-full bg-gradient-to-br ${themeClasses.gradient} text-white py-5 rounded-3xl font-black text-[10px] uppercase tracking-widest shadow-md transition-all active:scale-[0.98] disabled:opacity-50 mt-4`}
                                 >
                                     {editingHabitId ? 'Update Ritual' : 'Deploy Ritual'}

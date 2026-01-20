@@ -1,4 +1,3 @@
-
 import React, { useState, useRef, useEffect } from 'react';
 import { useApp, THEMES } from '../context/AppContext';
 import { ThemeColor, AppLanguage } from '../types';
@@ -48,20 +47,19 @@ export const Profile: React.FC = () => {
     const [swActive, setSwActive] = useState(false);
     const [isRetryingSw, setIsRetryingSw] = useState(false);
 
+    /**
+     * Mobile SW Detection Logic (Optimized)
+     * Check for any existing registration. If it exists, the service worker is active 
+     * enough for Push Notifications, even if 'navigator.serviceWorker.controller' is null.
+     */
     const checkSwStatus = async () => {
         if ('serviceWorker' in navigator) {
             try {
-                const registration = await navigator.serviceWorker.getRegistration();
-                // A worker is practically active if it's registered and either active, waiting, or controlling.
-                // Mobile browsers often delay the 'controller' until the next load.
-                const isActive = !!(
-                    registration?.active || 
-                    registration?.waiting || 
-                    registration?.installing || 
-                    navigator.serviceWorker.controller
-                );
-                setSwActive(isActive);
-                return isActive;
+                const registrations = await navigator.serviceWorker.getRegistrations();
+                // If any registrations exist, we consider the system "Ready"
+                const hasRegistration = registrations.length > 0;
+                setSwActive(hasRegistration);
+                return hasRegistration;
             } catch (e) {
                 return false;
             }
@@ -82,15 +80,12 @@ export const Profile: React.FC = () => {
 
         initStatus();
 
-        // Listen for changes
         if ('serviceWorker' in navigator) {
+            // Listen for any lifecycle updates
             navigator.serviceWorker.addEventListener('controllerchange', checkSwStatus);
-            // Re-check periodically during first minute of usage
-            const interval = setInterval(checkSwStatus, 5000);
-            return () => {
-                navigator.serviceWorker.removeEventListener('controllerchange', checkSwStatus);
-                clearInterval(interval);
-            };
+            // Check again after 3 seconds for mobile devices that register late
+            setTimeout(checkSwStatus, 3000);
+            return () => navigator.serviceWorker.removeEventListener('controllerchange', checkSwStatus);
         }
     }, []);
 
@@ -98,18 +93,18 @@ export const Profile: React.FC = () => {
         setIsRetryingSw(true);
         if ('serviceWorker' in navigator) {
             try {
-                // Force a re-registration attempt
-                await navigator.serviceWorker.register('/sw.js', { scope: '/' });
-                // Short delay for browser processing
-                await new Promise(resolve => setTimeout(resolve, 1500));
+                // Explicitly register with relative path
+                await navigator.serviceWorker.register('./sw.js', { scope: './' });
+                // Small delay to allow browser to process metadata
+                await new Promise(resolve => setTimeout(resolve, 2000));
                 const active = await checkSwStatus();
                 if (active) {
-                    triggerNotification("Signal Verified", "Lumina background system is now synced.", "achievement");
+                    triggerNotification("System Online", "Lumina background core is now synchronized.", "achievement");
                 } else {
-                    triggerNotification("System Pending", "Worker registered but still initializing. Please wait.", "reminder");
+                    triggerNotification("Waiting for Browser", "System registered. Please close and reopen the app to finalize.", "reminder");
                 }
             } catch (e) {
-                triggerNotification("Registration Error", "Check your browser privacy settings.", "reminder");
+                triggerNotification("System Blocked", "Please check your browser privacy settings.", "reminder");
             }
         }
         setIsRetryingSw(false);
@@ -147,11 +142,15 @@ export const Profile: React.FC = () => {
             return;
         }
 
-        // Final SW verify
+        // Final SW verify (mobile friendly)
         const swReady = await checkSwStatus();
         if (!swReady) {
-            triggerNotification("System Cold-Start", "Background system is warming up. Tap 'Retry' in diagnostics if this persists.", "reminder");
-            return;
+             // One last attempt to wait for it
+             const registrations = await navigator.serviceWorker.getRegistrations();
+             if (registrations.length === 0) {
+                triggerNotification("System Cold-Start", "Background system is initializing. Tap 'Initialize Core' in diagnostics if this persists.", "reminder");
+                return;
+             }
         }
 
         const permissionState = await requestNotificationPermission();
@@ -281,9 +280,9 @@ export const Profile: React.FC = () => {
 
     const renderToggle = (active: boolean, onToggle: () => void, label: string, icon?: React.ReactNode, subLabel?: string) => {
         return (
-            <div className="flex items-center justify-between p-4 bg-slate-50/40 dark:bg-slate-800/20 rounded-2xl border border-slate-100 dark:border-slate-800 transition-all hover:bg-slate-50">
+            <div className="flex items-center justify-between p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 transition-all hover:bg-slate-50">
                 <div className="flex items-center gap-4 flex-1 min-w-0">
-                    {icon && <div className={`w-9 h-9 rounded-xl bg-white dark:bg-slate-900 shadow-sm border border-slate-50 dark:border-slate-800 flex items-center justify-center shrink-0 ${active ? themeClasses?.text || 'text-indigo-600' : 'text-slate-300'}`}>{icon}</div>}
+                    {icon && <div className={`w-9 h-9 rounded-xl bg-slate-50 dark:bg-slate-800 flex items-center justify-center shrink-0 ${active ? themeClasses?.text || 'text-indigo-600' : 'text-slate-300'}`}>{icon}</div>}
                     <div className="flex flex-col min-w-0">
                         <span className="text-[12px] font-bold text-slate-800 dark:text-slate-100 leading-none">{label}</span>
                         {subLabel && (
@@ -304,8 +303,8 @@ export const Profile: React.FC = () => {
         if (!('Notification' in window)) return "API Unsupported";
         if (Notification.permission === 'denied') return "Blocked by Browser";
         if (!user) return "Login Required";
-        if (!swActive) return "Signal Booting...";
-        return notificationSettings?.enabled ? "Active Channel" : "Disabled";
+        if (!swActive) return "System Syncing...";
+        return notificationSettings?.enabled ? "Active Channel" : "Ready to Link";
     };
 
     return (
@@ -314,7 +313,7 @@ export const Profile: React.FC = () => {
                 <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tighter">{t('profile')}</h1>
                 <button 
                     onClick={() => setShowDiagnostics(!showDiagnostics)}
-                    className="p-2 bg-slate-100 dark:bg-slate-800 rounded-xl text-slate-400 hover:text-slate-600 transition-colors"
+                    className="p-2 bg-white dark:bg-slate-900 rounded-xl text-slate-400 hover:text-slate-600 transition-colors border border-slate-100 dark:border-slate-800"
                 >
                     <Activity size={18} />
                 </button>
@@ -323,28 +322,25 @@ export const Profile: React.FC = () => {
             {showDiagnostics && (
                 <div className="bg-slate-900 text-emerald-400 p-6 rounded-[2rem] font-mono text-[10px] space-y-2 animate-in slide-in-from-top-4">
                     <div className="flex justify-between border-b border-white/10 pb-1 mb-2">
-                        <span className="font-bold text-white uppercase">Signal Diagnostics</span>
+                        <span className="font-bold text-white uppercase">Identity Diagnostics</span>
                         <X size={14} className="cursor-pointer" onClick={() => setShowDiagnostics(false)} />
                     </div>
-                    <div className="flex justify-between"><span>Display Mode:</span> <span className={isStandalone ? 'text-emerald-400' : 'text-rose-400'}>{isStandalone ? 'STANDALONE' : 'BROWSER'}</span></div>
+                    <div className="flex justify-between"><span>Environment:</span> <span className={isStandalone ? 'text-emerald-400' : 'text-rose-400'}>{isStandalone ? 'STANDALONE (PWA)' : 'BROWSER TAB'}</span></div>
                     <div className="flex justify-between items-center">
                         <span>Background Core:</span> 
                         <div className="flex items-center gap-2">
                             <span className={swActive ? 'text-emerald-400' : 'text-rose-400'}>{swActive ? 'ACTIVE' : 'INACTIVE'}</span>
-                            {!swActive && (
-                                <button onClick={handleRetrySignal} disabled={isRetryingSw} className="px-2 py-0.5 bg-white/10 rounded-md text-white hover:bg-white/20 disabled:opacity-50 text-[8px] font-black uppercase">
-                                    {isRetryingSw ? 'WAITING...' : 'RETRY'}
-                                </button>
-                            )}
+                            <button onClick={handleRetrySignal} disabled={isRetryingSw} className="px-2 py-0.5 bg-white/10 rounded-md text-white hover:bg-white/20 disabled:opacity-50 text-[8px] font-black uppercase">
+                                {isRetryingSw ? 'WAITING...' : 'INITIALIZE CORE'}
+                            </button>
                         </div>
                     </div>
-                    <div className="flex justify-between"><span>Supabase Push:</span> <span className={user ? 'text-emerald-400' : 'text-rose-400'}>{user ? 'ENABLED' : 'AUTH REQUIRED'}</span></div>
-                    <div className="flex justify-between"><span>Permission:</span> <span className={Notification.permission === 'granted' ? 'text-emerald-400' : 'text-rose-400'}>{Notification.permission.toUpperCase()}</span></div>
-                    <div className="flex justify-between"><span>Haptic Engine:</span> <span>{'vibrate' in navigator ? 'READY' : 'N/A'}</span></div>
+                    <div className="flex justify-between"><span>Signal Permission:</span> <span className={Notification.permission === 'granted' ? 'text-emerald-400' : 'text-rose-400'}>{Notification.permission.toUpperCase()}</span></div>
+                    <div className="flex justify-between"><span>Growth Vault:</span> <span className={user ? 'text-emerald-400' : 'text-rose-400'}>{user ? 'CLAIMED' : 'LOCAL ONLY'}</span></div>
                     <div className="mt-4 p-3 bg-white/5 rounded-xl text-white/60 leading-relaxed italic">
                         {isStandalone 
-                            ? "✓ PWA Integrity Verified. Signal retry will wake up the core." 
-                            : "⚠ Browser Tab detected. Use 'Add to Home Screen' for deep mobile integration."}
+                            ? "✓ PWA Core active. If status is Inactive, tap 'Initialize Core' to force-start background signal." 
+                            : "⚠ Application is running in browser mode. Background signal is limited."}
                     </div>
                 </div>
             )}
@@ -408,7 +404,7 @@ export const Profile: React.FC = () => {
             </div>
 
             {/* MOBILE SYNC & PUSH */}
-            <div className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800 space-y-6">
+            <div className="bg-slate-50/50 dark:bg-slate-800/20 p-6 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 space-y-6">
                 <div className="flex items-center gap-2">
                     <div className={themeClasses?.text || 'text-indigo-600'}><Smartphone size={14} className="shrink-0" /></div>
                     <h2 className="text-[10px] font-bold text-slate-400 dark:text-slate-50 uppercase tracking-[0.2em] leading-none">System Sync</h2>
@@ -418,18 +414,18 @@ export const Profile: React.FC = () => {
                     {renderToggle(
                         !!notificationSettings?.enabled, 
                         handleEnableNotifications, 
-                        "Mobile Push", 
-                        <Smartphone size={16} />, 
+                        "Growth Nudges", 
+                        <BellRing size={16} />, 
                         getNotificationStatus()
                     )}
 
-                    <div className="p-4 bg-slate-50/40 dark:bg-slate-800/20 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-4">
+                    <div className="p-4 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 space-y-4 shadow-sm">
                         <div className="flex justify-between items-center">
                             <span className="text-[11px] font-bold text-slate-700 dark:text-slate-200 flex items-center gap-2">
-                                <Zap size={14} className="text-amber-500" /> Signal Integrity
+                                <Zap size={14} className="text-amber-500" /> Link Integrity
                             </span>
                             <span className={`text-[9px] font-black uppercase tracking-widest px-2 py-0.5 rounded-md ${notificationSettings?.enabled ? 'bg-emerald-50 text-emerald-500' : 'bg-slate-100 text-slate-400'}`}>
-                                {notificationSettings?.enabled ? 'Live' : 'Offline'}
+                                {notificationSettings?.enabled ? 'Online' : 'Offline'}
                             </span>
                         </div>
                         <button 
@@ -446,7 +442,7 @@ export const Profile: React.FC = () => {
                          <div className="bg-amber-50/50 dark:bg-amber-950/20 p-4 rounded-2xl border border-amber-100 dark:border-amber-900/30 flex gap-3">
                             <ShieldAlert size={16} className="text-amber-500 shrink-0" />
                             <div className="text-[9px] font-bold text-amber-700 dark:text-amber-300 leading-relaxed italic">
-                                <strong>PWA Hint:</strong> To unlock background alerts, please tap your browser menu and select <strong>"Add to Home Screen"</strong>.
+                                <strong>PWA Reminder:</strong> To enable background growth nudges, please tap the browser menu and select <strong>"Add to Home Screen"</strong>.
                             </div>
                          </div>
                     )}
@@ -456,7 +452,7 @@ export const Profile: React.FC = () => {
             {/* ROUTINE TIMELINE CARD */}
             <div className="bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] shadow-sm border border-slate-100 dark:border-slate-800 space-y-7">
                 <div className="flex items-center gap-2">
-                    <div className={themeClasses?.text || 'text-indigo-600'}><BellRing size={14} className="shrink-0" /></div>
+                    <div className={themeClasses?.text || 'text-indigo-600'}><Clock size={14} className="shrink-0" /></div>
                     <h2 className="text-[10px] font-bold text-slate-400 dark:text-slate-50 uppercase tracking-[0.2em] leading-none">Routine Timeline</h2>
                 </div>
 
@@ -465,7 +461,7 @@ export const Profile: React.FC = () => {
                         <div key={phase} className="flex items-center justify-between p-4 bg-slate-50/40 dark:bg-slate-800/20 rounded-2xl border border-slate-100 dark:border-slate-800 transition-all">
                             <div className="flex items-center gap-3">
                                 <Clock size={16} className="text-slate-400" />
-                                <span className="text-[12px] font-bold text-slate-700 dark:text-slate-200">{phase} Nudge</span>
+                                <span className="text-[12px] font-bold text-slate-700 dark:text-slate-200">{phase} Window</span>
                             </div>
                             <input 
                                 type="time"

@@ -93,39 +93,46 @@ export const generateGrowthAudit = async (
     const ai = getAiClient();
     const isEarlyStage = goals.length <= 1 && habits.length === 0 && journal.length === 0;
     
-    const habitData = habits.length > 0 ? habits.map(h => `${h.title} (Streak: ${h.streak})`).join(', ') : "None tracked yet";
-    const journalData = journal.length > 0 ? journal.slice(0, 10).map(j => `[Mood: ${j.mood}] ${j.content.substring(0, 100)}`).join('; ') : "None written yet";
+    // Improved context to include specific completion dates for the AI to see progress
+    const today = new Date().toISOString().split('T')[0];
+    const habitData = habits.length > 0 ? habits.map(h => {
+        const recentCompletions = h.completedDates.filter(d => {
+            const diff = (new Date(today).getTime() - new Date(d).getTime()) / (1000 * 3600 * 24);
+            return diff <= 7;
+        }).length;
+        return `${h.title} (Streak: ${h.streak}, Done ${recentCompletions}/7 last days)`;
+    }).join(', ') : "None tracked yet";
+    
+    const journalData = journal.length > 0 ? journal.slice(0, 10).map(j => `[Date: ${j.date.split('T')[0]}, Mood: ${j.mood}] ${j.content.substring(0, 100)}`).join('; ') : "None written yet";
     
     const context = `
-    PHASE: ${isEarlyStage ? 'SEEDING_PHASE (User just started)' : 'ACTIVE_GROWTH'}
-    Habits: ${habitData}
-    Journal Context: ${journalData}
-    Goals: ${goals.map(g => `${g.title} (${g.category})`).join(', ')}
+    PHASE: ${isEarlyStage ? 'SEEDING_PHASE' : 'ACTIVE_GROWTH'}
+    Current Date: ${today}
+    Habit Status: ${habitData}
+    Journal History: ${journalData}
+    Active Goals: ${goals.map(g => `${g.title} (${g.category}, Progress: ${g.progress}%)`).join(', ')}
     `;
 
     const prompt = `${getLangInstr(lang)} Analyze growth data. 
     
     CRITICAL TONE GUIDE:
-    - If user is in SEEDING_PHASE, be encouraging and use simple metaphors (e.g., 'Seeds of Intent', 'First Horizon').
-    - AVOID technical jargon like 'Unidirectional Planning', 'Objective Simplification', or 'Input-Output Disparity' for new users.
-    - Use human, warm coaching language.
+    - If user is in SEEDING_PHASE, be encouraging and simple.
+    - If user has recent activity (last 48 hours), acknowledge the specific progress in the 'summary'.
     
-    archetype: A persona (e.g. 'The Visionary Beginner', 'The Disciplined Architect').
     MANDATORY JSON:
-    - summary: Warm overview of their current state.
+    - summary: Warm overview acknowledging specific recent actions.
     - correlation: How their goals match their actions.
     - advice: One actionable next step.
     - trajectory: Future outlook.
     - archetype: string
     - happinessTrigger: A psychological "win".
-    - mentalThemes: Array of 3 human-friendly themes (e.g. 'Foundational Courage', 'Fresh Perspective').
+    - mentalThemes: Array of 3 themes.
     - identityScores: Array of 6 objects { subject: string, A: number, fullMark: 100 }.
-    - isCalibrating: true if low data, false otherwise.
+    - isCalibrating: boolean.
 
     Context: ${context}`;
 
     try {
-        // Fix: Use gemini-3-pro-preview for complex reasoning tasks like growth audits
         const res: GenerateContentResponse = await ai.models.generateContent({
             model: 'gemini-3-pro-preview',
             contents: prompt,

@@ -43,10 +43,12 @@ export interface Habit {
   description?: string;
   duration?: string;
   timeOfDay: 'Morning' | 'Afternoon' | 'Evening' | 'Anytime';
+  daysOfWeek: number[]; // [0,1,2,3,4,5,6] where 0 is Sunday
   reminderTime?: string; 
   linkedGoalId?: string; 
   streak: number;
   completedDates: string[]; 
+  createdAt: string; 
   lastUpdated?: number;
 }
 

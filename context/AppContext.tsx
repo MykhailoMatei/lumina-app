@@ -8,7 +8,7 @@ import { performCloudSync } from '../services/syncService';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 import { sendSystemNotification, requestNotificationPermission } from '../services/notificationService';
 
-export const APP_VERSION = '1.5.1-stable';
+export const APP_VERSION = '1.5.3-stable';
 
 export const THEMES: Record<ThemeColor, any> = {
   indigo: { name: 'accent_indigo', primary: 'bg-indigo-600', text: 'text-indigo-600', secondary: 'bg-indigo-50 dark:bg-indigo-900/20', gradient: 'from-indigo-600 to-blue-600', ring: 'ring-indigo-500', border: 'border-indigo-100 dark:border-indigo-900/30' },
@@ -126,7 +126,7 @@ interface AppContextType extends UserState {
   addGoal: (goal: Goal) => void;
   updateGoal: (id: string, updates: Partial<Goal>) => void;
   deleteGoal: (id: string) => void;
-  addHabit: (habit: Habit) => void;
+  addHabit: (habit: Omit<Habit, 'createdAt' | 'daysOfWeek'> & { createdAt?: string; daysOfWeek?: number[] }) => void;
   updateHabit: (id: string, updates: Partial<Habit>) => void;
   deleteHabit: (id: string) => void;
   toggleHabitCompletion: (id: string, date: string) => void;
@@ -190,10 +190,17 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // DEEP MERGE Logic with defensive defaults to prevent crashes on stale data versions
+        // Data Integrity Migration: Ensure all habits have createdAt and daysOfWeek
+        const habits = (parsed.habits || []).map((h: any) => ({
+          ...h,
+          createdAt: h.createdAt || new Date().toISOString(),
+          daysOfWeek: h.daysOfWeek || [0, 1, 2, 3, 4, 5, 6] // Default to daily if missing
+        }));
+        
         return {
           ...defaultState,
           ...parsed,
+          habits,
           notificationSettings: {
             ...defaultState.notificationSettings,
             ...(parsed.notificationSettings || {}),
@@ -244,10 +251,16 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       const phases: ('Morning' | 'Afternoon' | 'Evening')[] = ['Morning', 'Afternoon', 'Evening'];
       const today = now.toISOString().split('T')[0];
+      const todayDayNum = now.getDay();
 
       phases.forEach(phase => {
         if (routineTimeline[phase] === timeStr) {
-          const habitsToNudge = state.habits.filter(h => h.timeOfDay === phase && !h.completedDates.includes(today));
+          // Updated: Only nudge if the ritual is scheduled for TODAY
+          const habitsToNudge = state.habits.filter(h => 
+            h.timeOfDay === phase && 
+            h.daysOfWeek.includes(todayDayNum) &&
+            !h.completedDates.includes(today)
+          );
           
           if (habitsToNudge.length > 0) {
             const title = `${phase} Ritual Window`;
@@ -340,8 +353,14 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     triggerAutoSync(newState);
   };
 
-  const addHabit = (habit: Habit) => {
-    const newState = { ...state, habits: [{ ...habit, lastUpdated: Date.now() }, ...state.habits] };
+  const addHabit = (habit: Omit<Habit, 'createdAt' | 'daysOfWeek'> & { createdAt?: string; daysOfWeek?: number[] }) => {
+    const newHabit: Habit = {
+      ...habit,
+      createdAt: habit.createdAt || new Date().toISOString(),
+      daysOfWeek: habit.daysOfWeek || [0, 1, 2, 3, 4, 5, 6],
+      lastUpdated: Date.now()
+    } as Habit;
+    const newState = { ...state, habits: [newHabit, ...state.habits] };
     setState(newState);
     triggerAutoSync(newState);
   };

@@ -37,6 +37,11 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
   const hasSync = hasHabits && hasJournal;
   const hasAnyData = hasHabits || hasJournal || hasGoals;
 
+  // Track habit completions by creating a string representation of the data
+  // This ensures that completing a habit triggers a re-fetch if the user visits this page
+  const habitCompletionKey = JSON.stringify(habits.map(h => ({ id: h.id, streak: h.streak, count: h.completedDates.length })));
+  const journalKey = JSON.stringify(journalEntries.map(j => ({ id: j.id, mood: j.mood })));
+
   useEffect(() => {
     if (!hasAnyData) return;
 
@@ -52,7 +57,7 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
         }
     };
     fetchAudit();
-  }, [journalEntries.length, habits.length, goals.length, timeframe, hasAnyData]);
+  }, [habitCompletionKey, journalKey, goals.length, timeframe, hasAnyData, language]);
 
   const momentumGrid = useMemo(() => {
     const daysCount = 35;
@@ -123,7 +128,6 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                         "Insights are born from consistency. Provide a signal to the neural network to begin your evolution audit."
                     </p>
 
-                    {/* CALIBRATION CHECKLIST */}
                     <div className="space-y-3">
                         <button 
                             onClick={() => setView('goals')}
@@ -199,13 +203,12 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
               </div>
           </header>
 
-          {/* IDENTITY RESONANCE: RADAR CHART */}
           <div className="bg-white dark:bg-slate-900 p-8 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm relative overflow-hidden group">
                 <div className="flex justify-between items-start mb-6">
                     <div>
                         <h2 className="text-lg font-black text-slate-800 dark:text-white tracking-tight">Identity Resonance</h2>
                         <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">
-                          {hasGoals && (hasHabits || hasJournal) ? 'Strategic vs Daily Sync' : hasGoals ? 'Intention Mapping' : 'Execution Mapping'}
+                          Strategic vs Daily Sync
                         </p>
                     </div>
                     <div className={`p-3 rounded-2xl ${themeClasses.secondary} ${themeClasses.text}`}>
@@ -270,7 +273,6 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                 </div>
           </div>
 
-          {/* STRATEGIC AUDIT CARD */}
           <div className="relative p-8 rounded-[3.5rem] bg-white dark:bg-slate-900 overflow-hidden shadow-sm border border-slate-100 dark:border-slate-800 group">
                 <div className="relative z-10 space-y-6">
                     <div className="flex items-center gap-2">
@@ -296,7 +298,7 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                                 </div>
                                 <div>
                                     <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">Core Insight</span>
-                                    <p className="text-[11px] text-slate-700 dark:text-slate-200 font-bold leading-snug mt-1">{audit?.happinessTrigger}</p>
+                                    <p className="text-[11px] text-slate-700 dark:text-slate-200 font-bold leading-snug mt-1">{audit?.summary}</p>
                                 </div>
                             </div>
 
@@ -321,8 +323,7 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                 </div>
           </div>
 
-          {/* MOMENTUM DENSITY HEATMAP - Only if hasHabits */}
-          {hasHabits ? (
+          {hasHabits && (
             <div className="bg-white dark:bg-slate-900 p-8 rounded-[3.5rem] border border-slate-100 dark:border-slate-800 shadow-sm animate-in zoom-in-95">
                   <div className="flex justify-between items-start mb-8">
                       <div>
@@ -357,28 +358,9 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                       </div>
                   </div>
             </div>
-          ) : (
-            <div className="p-8 rounded-[3rem] border border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-center space-y-4 opacity-60">
-                <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-300">
-                    <Activity size={20} />
-                </div>
-                <div>
-                    <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider">Momentum Heatmap Locked</h3>
-                    <p className="text-[10px] font-medium text-slate-500 max-w-[200px] mt-1 mx-auto">
-                        This view requires active rituals to track daily biological consistency.
-                    </p>
-                </div>
-                <button 
-                  onClick={() => setView('dashboard')}
-                  className={`text-[8px] font-black uppercase tracking-widest ${themeClasses.text} flex items-center gap-1.5`}
-                >
-                  Start a Ritual <ChevronRight size={10} />
-                </button>
-            </div>
           )}
 
-          {/* SYNC MAP: MOOD vs DISCIPLINE - ONLY IF BOTH EXIST */}
-          {hasSync ? (
+          {hasSync && (
             <div className="bg-white dark:bg-slate-900 p-8 rounded-[3.5rem] border border-slate-100 dark:border-slate-800 shadow-sm animate-in slide-in-from-bottom-6">
                   <div className="flex justify-between items-start mb-6">
                       <div>
@@ -415,18 +397,6 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                           </p>
                       </div>
                   </div>
-            </div>
-          ) : (
-            <div className="p-8 rounded-[3rem] border border-dashed border-slate-200 dark:border-slate-800 flex flex-col items-center justify-center text-center space-y-4 opacity-60">
-                <div className="w-12 h-12 rounded-full bg-slate-50 dark:bg-slate-800 flex items-center justify-center text-slate-300">
-                    <Lock size={20} />
-                </div>
-                <div>
-                    <h3 className="text-sm font-black text-slate-800 dark:text-white uppercase tracking-wider">Sync Mapping Locked</h3>
-                    <p className="text-[10px] font-medium text-slate-500 max-w-[200px] mt-1 mx-auto">
-                        Track both {hasHabits ? 'Reflections' : 'Rituals'} to unlock cross-modal emotional analysis.
-                    </p>
-                </div>
             </div>
           )}
       </div>
