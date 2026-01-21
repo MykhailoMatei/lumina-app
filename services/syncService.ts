@@ -3,9 +3,33 @@ import { UserState, Goal, Habit, JournalEntry } from "../types";
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
 
 /**
- * Lumina Sync Service - Scalable Edition
- * Handles hard deletions and deep reconciliation of JSONB fields.
+ * Lumina Sync Service - Reconciliation & Mapping Edition
+ * Resolves naming mismatches between camelCase (TS) and snake_case (Postgres).
  */
+
+// Mapping helper to convert camelCase keys to snake_case for DB
+const mapToDb = (item: any) => {
+    const mapped: any = {};
+    for (const key in item) {
+        // Simple camelCase to snake_case conversion
+        const snakeKey = key.replace(/[A-Z]/g, letter => `_${letter.toLowerCase()}`);
+        mapped[snakeKey] = item[key];
+    }
+    return mapped;
+};
+
+// Mapping helper to convert snake_case keys to camelCase for Frontend
+const mapFromDb = (item: any) => {
+    const mapped: any = {};
+    for (const key in item) {
+        // Simple snake_case to camelCase conversion
+        const camelKey = key.replace(/([-_][a-z])/g, group =>
+            group.toUpperCase().replace('-', '').replace('_', '')
+        );
+        mapped[camelKey] = item[key];
+    }
+    return mapped;
+};
 
 export const performCloudSync = async (localData: UserState): Promise<{ success: boolean; data?: Partial<UserState>; message: string }> => {
     if (!isSupabaseConfigured) {
@@ -20,9 +44,9 @@ export const performCloudSync = async (localData: UserState): Promise<{ success:
     const userId = session.user.id;
 
     try {
-        console.log("Starting Lumina Cloud Sync...");
+        console.log("Starting Lumina Cloud Sync with Schema Mapping...");
 
-        // 1. Process Hard Deletions First (Clean up remote before fetching)
+        // 1. Process Hard Deletions First
         const deletePromises: any[] = [];
         if (localData.deletedIds?.goals?.length > 0) {
             deletePromises.push(supabase.from('goals').delete().in('id', localData.deletedIds.goals).eq('user_id', userId));
@@ -35,9 +59,7 @@ export const performCloudSync = async (localData: UserState): Promise<{ success:
         }
         
         if (deletePromises.length > 0) {
-            const deleteResults = await Promise.all(deletePromises);
-            const deleteErrors = deleteResults.filter(r => r.error);
-            if (deleteErrors.length > 0) console.warn("Deletion sync warnings:", deleteErrors);
+            await Promise.all(deletePromises);
         }
 
         // 2. Fetch Latest Remote State
@@ -55,90 +77,76 @@ export const performCloudSync = async (localData: UserState): Promise<{ success:
             throw new Error(`Fetch failed: ${gErr?.message || hErr?.message || jErr?.message}`);
         }
 
-        // Helper to ensure JSONB fields are treated as arrays
-        const sanitizeRemote = <T extends object>(list: T[] | null): T[] => {
+        // Map remote data back to frontend camelCase and sanitize JSONB
+        const sanitizeAndMap = <T extends object>(list: any[] | null): T[] => {
             return (list || []).map(item => {
-                const newItem = { ...item } as any;
-                // Specific fields that must be arrays
+                const mapped = mapFromDb(item);
                 const arrayFields = ['milestones', 'completedDates', 'daysOfWeek', 'activities'];
                 arrayFields.forEach(field => {
-                    if (newItem[field]) {
-                        // If it's a string (sometimes returned by older drivers), parse it.
-                        // Otherwise, ensure it's at least an empty array if null.
-                        if (typeof newItem[field] === 'string') {
-                            try { newItem[field] = JSON.parse(newItem[field]); } catch (e) { newItem[field] = []; }
+                    if (mapped[field]) {
+                        if (typeof mapped[field] === 'string') {
+                            try { mapped[field] = JSON.parse(mapped[field]); } catch (e) { mapped[field] = []; }
                         }
                     } else {
-                        newItem[field] = [];
+                        mapped[field] = [];
                     }
                 });
-                return newItem as T;
+                return mapped as T;
             });
         };
 
-        const rGoals = sanitizeRemote(remoteGoals) as Goal[];
-        const rHabits = sanitizeRemote(remoteHabits) as Habit[];
-        const rEntries = sanitizeRemote(remoteEntries) as JournalEntry[];
+        const rGoals = sanitizeAndMap<Goal>(remoteGoals);
+        const rHabits = sanitizeAndMap<Habit>(remoteHabits);
+        const rEntries = sanitizeAndMap<JournalEntry>(remoteEntries);
 
         // 3. Determine what needs to be pushed (Local newer than Remote)
-        const goalsToPush = localData.goals.filter(local => {
-            const remote = rGoals.find(r => r.id === local.id);
-            return !remote || (Number(local.lastUpdated) || 0) > (Number(remote.lastUpdated) || 0);
-        });
+        const findNewer = <T extends { id: string; lastUpdated?: number }>(localList: T[], remoteList: T[]) => {
+            return localList.filter(local => {
+                const remote = remoteList.find(r => r.id === local.id);
+                return !remote || (Number(local.lastUpdated) || 0) > (Number(remote.lastUpdated) || 0);
+            });
+        };
 
-        const habitsToPush = localData.habits.filter(local => {
-            const remote = rHabits.find(r => r.id === local.id);
-            return !remote || (Number(local.lastUpdated) || 0) > (Number(remote.lastUpdated) || 0);
-        });
-
-        const entriesToPush = localData.journalEntries.filter(local => {
-            const remote = rEntries.find(r => r.id === local.id);
-            return !remote || (Number(local.lastUpdated) || 0) > (Number(remote.lastUpdated) || 0);
-        });
+        const goalsToPush = findNewer(localData.goals, rGoals);
+        const habitsToPush = findNewer(localData.habits, rHabits);
+        const entriesToPush = findNewer(localData.journalEntries, rEntries);
 
         const pushPromises: any[] = [];
         
+        // Push with mapped keys
         if (goalsToPush.length > 0) {
             pushPromises.push(supabase.from('goals').upsert(
-                goalsToPush.map(g => ({ ...g, user_id: userId }))
+                goalsToPush.map(g => ({ ...mapToDb(g), user_id: userId }))
             ));
         }
         if (habitsToPush.length > 0) {
             pushPromises.push(supabase.from('habits').upsert(
-                habitsToPush.map(h => ({ ...h, user_id: userId }))
+                habitsToPush.map(h => ({ ...mapToDb(h), user_id: userId }))
             ));
         }
         if (entriesToPush.length > 0) {
             pushPromises.push(supabase.from('journal_entries').upsert(
-                entriesToPush.map(e => ({ ...e, user_id: userId }))
+                entriesToPush.map(e => ({ ...mapToDb(e), user_id: userId }))
             ));
         }
 
         if (pushPromises.length > 0) {
             const results = await Promise.all(pushPromises);
             const errors = results.filter(r => r.error);
-            if (errors.length > 0) {
-                console.error("Push sync failed:", errors);
-                throw errors[0].error;
-            }
+            if (errors.length > 0) throw errors[0].error;
         }
 
-        // 4. Merge Logic (Reconciliation) - Keep the most recently updated version
+        // 4. Merge Logic (Reconciliation)
         const merge = <T extends { id: string; lastUpdated?: number }>(localList: T[], remoteList: T[]): T[] => {
             const map = new Map<string, T>();
             [...remoteList, ...localList].forEach(item => {
                 const existing = map.get(item.id);
                 const itemTime = Number(item.lastUpdated) || 0;
                 const existingTime = existing ? (Number(existing.lastUpdated) || 0) : -1;
-                
-                if (!existing || itemTime >= existingTime) {
-                    map.set(item.id, item);
-                }
+                if (!existing || itemTime >= existingTime) map.set(item.id, item);
             });
             return Array.from(map.values());
         };
-
-        console.log("Sync complete. Vault synchronized.");
 
         return {
             success: true,

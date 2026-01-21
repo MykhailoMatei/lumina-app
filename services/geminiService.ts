@@ -8,6 +8,11 @@ const getAiClient = () => {
   return new GoogleGenAI({ apiKey: apiKey });
 };
 
+// Helper to clean AI response of markdown artifacts
+const cleanJsonResponse = (text: string): string => {
+  return text.replace(/```json\n?/, '').replace(/```\n?$/, '').trim();
+};
+
 const getLangInstr = (lang: AppLanguage) => 
   `CRITICAL: Response MUST be strictly in ${lang}. Output ONLY valid JSON.`;
 
@@ -61,7 +66,7 @@ export const generateDailyBriefing = async (name: string, goals: Goal[], habits:
       contents: prompt,
       config: { responseMimeType: "application/json" }
     });
-    const data = JSON.parse(response.text || "{}");
+    const data = JSON.parse(cleanJsonResponse(response.text || "{}"));
     return {
       motivation: data.motivation || "Your potential is a series of choices.",
       focus: data.focus || "Daily Evolution",
@@ -94,10 +99,13 @@ export const generateGrowthAudit = async (
     const isEarlyStage = goals.length <= 1 && habits.length === 0 && journal.length === 0;
     
     const now = new Date();
+    const todayStr = now.toISOString().split('T')[0];
+    const yesterday = new Date(now);
+    yesterday.setDate(now.getDate() - 1);
+    const yesterdayStr = yesterday.toISOString().split('T')[0];
     
     // Create a detailed map of daily habit activity for the AI
     const habitData = habits.length > 0 ? habits.map(h => {
-        // Explicitly typed as string[] to fix the 'never' assignment error
         const last7Days: string[] = []; 
         for(let i=0; i<7; i++) {
             const d = new Date(now);
@@ -115,11 +123,10 @@ export const generateGrowthAudit = async (
     }).join('\n') : "No reflections written.";
     
     const context = `
-    DETERMINISTIC CURRENT TIME: ${now.toLocaleString()}
-    NEURAL_SEED: ${Math.random().toString(36).substring(7)}
-    USER_IDENTITY: Growth Traveler
+    CURRENT_DATE_TIME: ${now.toLocaleString()}
+    RANDOM_SALT: ${Math.random().toString(36).substring(7)}
     
-    HABIT_CHRONOLOGY (Last 7 Days):
+    HABIT_CHRONOLOGY (TODAY=${todayStr}, YESTERDAY=${yesterdayStr}):
     ${habitData}
     
     REFLECTION_CHRONOLOGY (Last 7 Entries):
@@ -130,22 +137,23 @@ export const generateGrowthAudit = async (
     `;
 
     const prompt = `${getLangInstr(lang)} 
-    You are the "Lumina Growth Architect". Analyze the behavior delta.
+    Analyze the behavioral delta specifically between YESTERDAY and TODAY.
     
-    STRICT INSTRUCTION:
-    1. Acknowledge SPECIFIC changes in habits/journal from the last 24-48 hours.
-    2. If the user is consistently checking habits, reflect a POSITIVE shift in the identityScores.
-    3. Ensure the archetype and mentalThemes evolve based on current entries.
+    RULES:
+    1. DO NOT use generic boilerplate like "Maintaining steady momentum" unless activity is literally identical.
+    2. LOOK for specific correlations (e.g., "Since you missed your habit X today, your identity score in Y shifted").
+    3. Archetype and mental themes MUST change if recent journal entries show new emotional keywords.
+    4. Identity scores (A) should be varied and non-uniform (e.g., 42, 67, 89, not all 50).
     
     MANDATORY JSON FORMAT:
     {
-      "summary": "Overview of recent behavioral shifts.",
-      "correlation": "Analysis of ritual sync with goals.",
-      "advice": "Actionable adjustment.",
-      "trajectory": "Outlook based on current momentum.",
-      "archetype": "Dynamic identity title.",
-      "happinessTrigger": "A psychological win to celebrate.",
-      "mentalThemes": ["3 core keywords"],
+      "summary": "Specific analysis of recent 24h behavior.",
+      "correlation": "How rituals impacted goals today.",
+      "advice": "Actionable nudge based on what was missed or achieved today.",
+      "trajectory": "Dynamic outlook.",
+      "archetype": "Title reflecting current state.",
+      "happinessTrigger": "A win to celebrate.",
+      "mentalThemes": ["3 unique keywords"],
       "identityScores": [
           {"subject": "Health", "A": 0-100, "fullMark": 100},
           {"subject": "Career", "A": 0-100, "fullMark": 100},
@@ -161,41 +169,46 @@ export const generateGrowthAudit = async (
 
     try {
         const res: GenerateContentResponse = await ai.models.generateContent({
-            model: 'gemini-3-pro-preview',
+            model: 'gemini-3-flash-preview',
             contents: prompt,
             config: { 
                 responseMimeType: "application/json",
-                temperature: 0.95 // High temperature to ensure variety
+                temperature: 0.9 // Encourage variety
             }
         });
-        const parsed = JSON.parse(res.text || "{}");
+        
+        const cleanedText = cleanJsonResponse(res.text || "{}");
+        const parsed = JSON.parse(cleanedText);
+        
         return {
-            summary: parsed.summary || "You've planted your first seed.",
-            correlation: parsed.correlation || "Beginning to map your intentions.",
-            advice: parsed.advice || "Start a daily ritual to build momentum.",
-            trajectory: parsed.trajectory || "Positive foundation.",
+            summary: parsed.summary || "Recalibrating your journey.",
+            correlation: parsed.correlation || "Synthesizing your daily signals.",
+            advice: parsed.advice || "Observe the small details of your rituals.",
+            trajectory: parsed.trajectory || "Initial momentum.",
             archetype: parsed.archetype || "Growth Traveler",
-            happinessTrigger: parsed.happinessTrigger || "Taking the first step is the hardest part.",
-            mentalThemes: parsed.mentalThemes || ["Fresh Start", "Initial Vision", "Courage"],
+            happinessTrigger: parsed.happinessTrigger || "Every action is a vote for your future self.",
+            mentalThemes: parsed.mentalThemes || ["Growth", "Presence", "Vision"],
             identityScores: parsed.identityScores || [
-              { subject: 'Health', A: 30, fullMark: 100 },
-              { subject: 'Career', A: 30, fullMark: 100 },
-              { subject: 'Creativity', A: 30, fullMark: 100 },
-              { subject: 'Learning', A: 30, fullMark: 100 },
-              { subject: 'Personal', A: 30, fullMark: 100 },
-              { subject: 'Financial', A: 30, fullMark: 100 }
+              { subject: 'Health', A: 45, fullMark: 100 },
+              { subject: 'Career', A: 52, fullMark: 100 },
+              { subject: 'Creativity', A: 38, fullMark: 100 },
+              { subject: 'Learning', A: 61, fullMark: 100 },
+              { subject: 'Personal', A: 49, fullMark: 100 },
+              { subject: 'Financial', A: 55, fullMark: 100 }
             ],
             isCalibrating: parsed.isCalibrating ?? isEarlyStage
         };
-    } catch {
+    } catch (e) {
+        console.error("Lumina Growth Audit Parsing Error:", e);
+        // Vary the fallback slightly so it's not totally frozen
         return { 
-            summary: "Maintaining steady momentum.", 
-            correlation: "Building a foundation.", 
-            advice: "Stay the course.",
-            trajectory: "Sustainable growth.",
-            archetype: "Growth Traveler",
-            happinessTrigger: "Your presence is your anchor.",
-            mentalThemes: ["Persistence", "Stability", "Vision"],
+            summary: "Analyzing steady patterns in your evolution.", 
+            correlation: "Maintaining baseline rituals.", 
+            advice: "Try to introduce a small delta in your routine tomorrow.",
+            trajectory: "Stable foundation.",
+            archetype: "Pattern Observer",
+            happinessTrigger: "Consistency is your greatest asset.",
+            mentalThemes: ["Persistence", "Observation", "Focus"],
             identityScores: [
               { subject: 'Health', A: 50, fullMark: 100 },
               { subject: 'Career', A: 50, fullMark: 100 },
@@ -214,7 +227,7 @@ export const suggestAtomicHabit = async (habitTitle: string, lang: AppLanguage) 
   const prompt = `${getLangInstr(lang)} Tiny habit for: "${habitTitle}". JSON: { suggestion, reason }.`;
   try {
     const res = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt, config: { responseMimeType: "application/json" } });
-    return JSON.parse(res.text || "{}");
+    return JSON.parse(cleanJsonResponse(res.text || "{}"));
   } catch { return { suggestion: habitTitle, reason: "Start small." }; }
 };
 
@@ -223,7 +236,7 @@ export const generateMilestonesForGoal = async (goalTitle: string, lang: AppLang
   const prompt = `${getLangInstr(lang)} 5 milestones for "${goalTitle}". JSON array of strings.`;
   try {
     const res = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt, config: { responseMimeType: "application/json" } });
-    return JSON.parse(res.text || "[]");
+    return JSON.parse(cleanJsonResponse(res.text || "[]"));
   } catch { return []; }
 };
 
@@ -232,7 +245,7 @@ export const translateContent = async (title: string, content: string, lang: App
   const prompt = `Translate to ${lang}. JSON {title, content}. Title: ${title} Content: ${content}`;
   try {
     const res = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt, config: { responseMimeType: "application/json" } });
-    return JSON.parse(res.text || "{}");
+    return JSON.parse(cleanJsonResponse(res.text || "{}"));
   } catch { return { title, content }; }
 };
 
@@ -242,6 +255,6 @@ export const generateEntryInsight = async (content: string, mood: string, goalTi
   if (imageData) parts.push({ inlineData: { data: imageData.split(',')[1], mimeType: imageData.split(';')[0].split(':')[1] } });
   try {
     const res = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: { parts }, config: { responseMimeType: "application/json" } });
-    return JSON.parse(res.text || "{}").insight || " reflecting on your journey is the first step toward mastery.";
+    return JSON.parse(cleanJsonResponse(res.text || "{}")).insight || "Reflecting on your journey is the first step toward mastery.";
   } catch { return "Reflecting on your journey is the first step toward mastery."; }
 };

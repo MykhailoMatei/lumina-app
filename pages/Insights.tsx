@@ -37,31 +37,37 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
   const hasGoals = goals.length > 0;
   const hasAnyData = hasHabits || hasJournal || hasGoals;
 
-  const fetchAudit = useCallback(async () => {
+  const fetchAudit = useCallback(async (force: boolean = false) => {
     if (!hasAnyData) return;
+    if (loadingAudit) return;
+    
     setLoadingAudit(true);
     try {
+        console.log("Triggering Growth Audit with Force:", force);
         const res = await generateGrowthAudit(habits, goals, journalEntries, language);
         setAudit(res);
         const nowStr = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
         setLastAuditTime(nowStr);
         localStorage.setItem('lumina_last_audit_time', nowStr);
     } catch (e) {
-        console.error("Audit failed", e);
+        console.error("Audit fetch failed in component:", e);
     } finally {
-        setLoadingAudit(false);
+        // Minimum delay for UI satisfaction
+        setTimeout(() => setLoadingAudit(false), 800);
     }
-  }, [habits, goals, journalEntries, language, hasAnyData]);
+  }, [habits, goals, journalEntries, language, hasAnyData, loadingAudit]);
 
-  // Track state changes deeply to trigger auto-refresh when arriving at the page
-  // We include a 'today' string to force a refresh if the date changes
-  const todayStr = new Date().toISOString().split('T')[0];
-  const habitCompletionKey = JSON.stringify(habits.map(h => ({ id: h.id, streak: h.streak, dates: h.completedDates.slice(-7) })));
-  const journalKey = JSON.stringify(journalEntries.map(j => ({ id: j.id, mood: j.mood })));
+  // Comprehensive key that changes whenever any completion data changes
+  const dataSignalKey = useMemo(() => {
+    const habitKey = habits.map(h => `${h.id}-${h.completedDates.length}-${h.streak}`).join('|');
+    const journalKey = journalEntries.length > 0 ? journalEntries[0].id + journalEntries[0].content.length : 'none';
+    const goalKey = goals.map(g => `${g.id}-${g.progress}`).join('|');
+    return `${habitKey}-${journalKey}-${goalKey}-${new Date().getHours()}`;
+  }, [habits, journalEntries, goals]);
 
   useEffect(() => {
     fetchAudit();
-  }, [habitCompletionKey, journalKey, goals.length, language, todayStr]);
+  }, [dataSignalKey, language]);
 
   const momentumGrid = useMemo(() => {
     const daysCount = 35;
@@ -90,29 +96,6 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
       ];
   }, [audit]);
 
-  const correlationData = useMemo(() => {
-      const moodMap: Record<string, number> = { 'Great': 5, 'Good': 4, 'Neutral': 3, 'Bad': 2, 'Awful': 1 };
-      const result: { dateLabel: string; score: number; perfectScore: number | null; }[] = [];
-      const daysCount = timeframe === 'Week' ? 7 : 14;
-      
-      for(let i = daysCount - 1; i >= 0; i--) {
-          const d = new Date(); 
-          d.setDate(d.getDate() - i);
-          const dateStr = d.toISOString().split('T')[0];
-          const entry = journalEntries.find(e => e.date && e.date.split('T')[0] === dateStr);
-          const habitsDone = habits.filter(h => h.completedDates.includes(dateStr)).length;
-          const habitsTotal = habits.length;
-          const score = entry ? (moodMap[entry.mood] || 3) : 3;
-
-          result.push({
-              dateLabel: d.toLocaleDateString(undefined, { weekday: 'short' }),
-              score: score,
-              perfectScore: habitsTotal > 0 && habitsDone === habitsTotal ? score : null
-          });
-      }
-      return result;
-  }, [journalEntries, habits, timeframe]);
-
   if (!hasAnyData) {
     return (
         <div className="pb-40 space-y-10 animate-in fade-in duration-1000 flex flex-col items-center justify-center min-h-[80vh] text-center px-8">
@@ -133,37 +116,23 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                     </p>
 
                     <div className="space-y-3">
-                        <button 
-                            onClick={() => setView('goals')}
-                            className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all active:scale-[0.98] ${hasGoals ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700'}`}
-                        >
+                        <button onClick={() => setView('goals')} className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all active:scale-[0.98] ${hasGoals ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700'}`}>
                             <div className="flex items-center gap-3">
                                 {hasGoals ? <div className="bg-emerald-500 rounded-full p-1 text-white"><Check size={12} strokeWidth={4} /></div> : <Target size={16} className="text-slate-300" />}
                                 <span className={`text-[10px] font-black uppercase tracking-widest ${hasGoals ? 'text-emerald-600' : 'text-slate-400'}`}>1. Plant a Goal</span>
                             </div>
-                            {!hasGoals && <PlusCircle size={14} className="text-slate-300" />}
                         </button>
-
-                        <button 
-                            onClick={() => setView('dashboard')}
-                            className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all active:scale-[0.98] ${hasHabits ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700'}`}
-                        >
+                        <button onClick={() => setView('dashboard')} className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all active:scale-[0.98] ${hasHabits ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700'}`}>
                             <div className="flex items-center gap-3">
                                 {hasHabits ? <div className="bg-emerald-500 rounded-full p-1 text-white"><Check size={12} strokeWidth={4} /></div> : <Zap size={16} className="text-slate-300" />}
                                 <span className={`text-[10px] font-black uppercase tracking-widest ${hasHabits ? 'text-emerald-600' : 'text-slate-400'}`}>2. Start a Ritual</span>
                             </div>
-                            {!hasHabits && <PlusCircle size={14} className="text-slate-300" />}
                         </button>
-
-                        <button 
-                            onClick={() => setView('journal')}
-                            className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all active:scale-[0.98] ${hasJournal ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700'}`}
-                        >
+                        <button onClick={() => setView('journal')} className={`w-full flex items-center justify-between p-4 rounded-2xl border transition-all active:scale-[0.98] ${hasJournal ? 'bg-emerald-50 border-emerald-100' : 'bg-slate-50 dark:bg-slate-800 border-slate-100 dark:border-slate-700'}`}>
                             <div className="flex items-center gap-3">
                                 {hasJournal ? <div className="bg-emerald-500 rounded-full p-1 text-white"><Check size={12} strokeWidth={4} /></div> : <BookOpen size={16} className="text-slate-300" />}
                                 <span className={`text-[10px] font-black uppercase tracking-widest ${hasJournal ? 'text-emerald-600' : 'text-slate-400'}`}>3. Write Reflection</span>
                             </div>
-                            {!hasJournal && <PlusCircle size={14} className="text-slate-300" />}
                         </button>
                     </div>
                 </div>
@@ -175,23 +144,23 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
   return (
       <div className="pb-40 space-y-6 animate-in fade-in duration-1000">
           <header className="px-1 pt-2 flex justify-between items-end">
-              <div>
+              <div className="flex-1 pr-4">
                   <h1 className="text-3xl font-black text-slate-800 dark:text-slate-100 tracking-tighter">Neuro Insights</h1>
-                  <div className="flex items-center gap-2 mt-1">
+                  <div className="flex flex-wrap items-center gap-2 mt-1">
                       <p className="text-[10px] font-black uppercase tracking-[0.3em] text-slate-400">
-                        {audit?.archetype || 'Analyzing Identity...'}
+                        {loadingAudit ? 'Recalibrating...' : (audit?.archetype || 'Analyzing Identity...')}
                       </p>
                       <div className="flex items-center gap-1.5 bg-slate-100 dark:bg-slate-800 px-2 py-0.5 rounded-full border border-slate-200 dark:border-slate-700">
                           <Clock size={10} className="text-slate-400" />
                           <span className="text-[8px] font-black uppercase text-slate-400 tracking-widest">
-                              Last Audit: {lastAuditTime || 'Calculating...'}
+                              {lastAuditTime || 'Syncing...'}
                           </span>
                       </div>
                   </div>
               </div>
-              <div className="flex gap-2">
+              <div className="flex gap-2 shrink-0">
                   <button 
-                      onClick={fetchAudit}
+                      onClick={() => fetchAudit(true)}
                       disabled={loadingAudit}
                       className={`p-3 bg-white dark:bg-slate-900 rounded-2xl border border-slate-100 dark:border-slate-800 shadow-sm transition-all active:scale-90 ${loadingAudit ? 'opacity-50' : ''}`}
                   >
@@ -215,16 +184,14 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                 <div className="flex justify-between items-start mb-6">
                     <div>
                         <h2 className="text-lg font-black text-slate-800 dark:text-white tracking-tight">Identity Resonance</h2>
-                        <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">
-                          Strategic vs Daily Sync
-                        </p>
+                        <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">Strategic vs Daily Sync</p>
                     </div>
                     <div className={`p-3 rounded-2xl ${themeClasses.secondary} ${themeClasses.text}`}>
                         <Fingerprint size={20} />
                     </div>
                 </div>
 
-                <div className="h-64 -mx-4">
+                <div className={`h-64 -mx-4 transition-all duration-700 ${loadingAudit ? 'opacity-30 blur-sm scale-95' : 'opacity-100'}`}>
                     <ResponsiveContainer width="100%" height="100%">
                         <RadarChart cx="50%" cy="50%" outerRadius="80%" data={radarData}>
                             <PolarGrid stroke="#e2e8f0" strokeOpacity={0.5} />
@@ -236,7 +203,7 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                                 stroke={accentHex}
                                 fill={accentHex}
                                 fillOpacity={0.4}
-                                animationBegin={300}
+                                animationBegin={0}
                                 animationDuration={1000}
                             />
                         </RadarChart>
@@ -246,32 +213,16 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                 <div className="mt-4 flex flex-wrap gap-2 relative">
                     <div className="w-full flex justify-between items-center mb-1">
                         <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">Mental Themes</span>
-                        <button 
-                            onClick={() => setShowThemeHelp(!showThemeHelp)}
-                            className="p-1 text-slate-300 hover:text-slate-500"
-                        >
+                        <button onClick={() => setShowThemeHelp(!showThemeHelp)} className="p-1 text-slate-300 hover:text-slate-500">
                             <Info size={12} />
                         </button>
                     </div>
-
-                    {showThemeHelp && (
-                        <div className="absolute bottom-full left-0 right-0 mb-4 p-4 bg-slate-900 text-white rounded-2xl text-[9px] font-bold leading-relaxed z-20 shadow-2xl animate-in fade-in slide-in-from-bottom-2">
-                             Mental Themes represent recurring psychological patterns detected by AI across your goals, rituals, and reflections. They evolve as your data grows.
-                        </div>
-                    )}
-
                     {audit?.mentalThemes?.map((theme: string) => (
                         <div key={theme} className="px-3 py-1 rounded-full bg-slate-50 dark:bg-slate-800 border border-slate-100 dark:border-slate-700 flex items-center gap-1.5 transition-transform hover:scale-105">
                             <Waves size={10} className={themeClasses.text} />
                             <span className="text-[9px] font-black uppercase tracking-widest text-slate-500">{theme}</span>
                         </div>
                     ))}
-                    {!hasJournal && (
-                        <div className="px-3 py-1 rounded-full bg-slate-50 dark:bg-slate-800 border border-dashed border-slate-200 flex items-center gap-1.5 opacity-40">
-                            <PenLine size={10} />
-                            <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">Journal to unlock themes</span>
-                        </div>
-                    )}
                 </div>
           </div>
 
@@ -284,47 +235,39 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                             </div>
                             <div>
                                 <h2 className="text-slate-800 dark:text-white font-black text-sm uppercase tracking-wider">Growth Strategist</h2>
-                                <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">Tailored AI Guidance</p>
+                                <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">Dynamic AI Insight</p>
                             </div>
                         </div>
-                        {loadingAudit && <div className="text-[8px] font-black uppercase text-slate-400 animate-pulse">Analyzing delta...</div>}
                     </div>
 
-                    {loadingAudit && !audit ? (
-                        <div className="space-y-3 py-2">
-                            <div className="h-4 w-full bg-slate-50 dark:bg-slate-800 rounded-full animate-pulse" />
-                            <div className="h-4 w-3/4 bg-slate-50 dark:bg-slate-800 rounded-full animate-pulse" />
-                        </div>
-                    ) : (
-                        <div className={`space-y-6 transition-opacity ${loadingAudit ? 'opacity-50' : 'opacity-100'}`}>
-                            <div className="p-5 bg-slate-50/50 dark:bg-slate-800/40 rounded-3xl border border-slate-100 dark:border-slate-800/50 flex gap-4">
-                                <div className="w-10 h-10 rounded-full bg-rose-500/10 flex items-center justify-center shrink-0 border border-rose-500/20">
-                                    <Heart size={18} className="text-rose-400" />
-                                </div>
-                                <div>
-                                    <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">Core Insight</span>
-                                    <p className="text-[11px] text-slate-700 dark:text-slate-200 font-bold leading-snug mt-1">{audit?.summary}</p>
-                                </div>
+                    <div className={`space-y-6 transition-all duration-500 ${loadingAudit ? 'opacity-30' : 'opacity-100'}`}>
+                        <div className="p-5 bg-slate-50/50 dark:bg-slate-800/40 rounded-3xl border border-slate-100 dark:border-slate-800/50 flex gap-4">
+                            <div className="w-10 h-10 rounded-full bg-rose-500/10 flex items-center justify-center shrink-0 border border-rose-500/20">
+                                <Heart size={18} className="text-rose-400" />
                             </div>
+                            <div>
+                                <span className="text-[8px] font-black uppercase tracking-widest text-slate-400">Core Insight</span>
+                                <p className="text-[11px] text-slate-700 dark:text-slate-200 font-bold leading-snug mt-1">{audit?.summary}</p>
+                            </div>
+                        </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="bg-slate-50/50 dark:bg-slate-800/40 rounded-3xl p-4 border border-slate-100 dark:border-slate-800/50">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <Zap size={14} className="text-amber-400" />
-                                        <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Advice</span>
-                                    </div>
-                                    <p className="text-[10px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed italic">"{audit?.advice}"</p>
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="bg-slate-50/50 dark:bg-slate-800/40 rounded-3xl p-4 border border-slate-100 dark:border-slate-800/50">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <Zap size={14} className="text-amber-400" />
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Advice</span>
                                 </div>
-                                <div className="bg-slate-50/50 dark:bg-slate-800/40 rounded-3xl p-4 border border-slate-100 dark:border-slate-800/50">
-                                    <div className="flex items-center gap-2 mb-2">
-                                        <TrendingUp size={14} className={themeClasses.text} />
-                                        <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Trajectory</span>
-                                    </div>
-                                    <p className="text-[10px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed">{audit?.trajectory}</p>
+                                <p className="text-[10px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed italic">"{audit?.advice}"</p>
+                            </div>
+                            <div className="bg-slate-50/50 dark:bg-slate-800/40 rounded-3xl p-4 border border-slate-100 dark:border-slate-800/50">
+                                <div className="flex items-center gap-2 mb-2">
+                                    <TrendingUp size={14} className={themeClasses.text} />
+                                    <span className="text-[9px] font-black uppercase tracking-widest text-slate-400">Trajectory</span>
                                 </div>
+                                <p className="text-[10px] text-slate-700 dark:text-slate-300 font-medium leading-relaxed">{audit?.trajectory}</p>
                             </div>
                         </div>
-                    )}
+                    </div>
                 </div>
           </div>
 
@@ -339,7 +282,6 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                           <LayoutGrid size={20} />
                       </div>
                   </div>
-
                   <div className="grid grid-cols-7 gap-2">
                       {momentumGrid.map((day, idx) => (
                           <div 
@@ -352,37 +294,6 @@ export const Insights: React.FC<{ setView: (v: string) => void }> = ({ setView }
                               }`}
                           />
                       ))}
-                  </div>
-            </div>
-          )}
-
-          {hasJournal && hasHabits && (
-            <div className="bg-white dark:bg-slate-900 p-8 rounded-[3.5rem] border border-slate-100 dark:border-slate-800 shadow-sm animate-in slide-in-from-bottom-6">
-                  <div className="flex justify-between items-start mb-6">
-                      <div>
-                          <h2 className="text-lg font-black text-slate-800 dark:text-white tracking-tight">Discipline Sync</h2>
-                          <p className="text-[8px] font-black uppercase tracking-[0.2em] text-slate-400">Integrated Emotional correlation</p>
-                      </div>
-                      <div className={`p-3 rounded-2xl bg-emerald-50 dark:bg-emerald-900/20 text-emerald-500`}>
-                          <Flame size={20} />
-                      </div>
-                  </div>
-
-                  <div className="h-48">
-                      <ResponsiveContainer width="100%" height="100%">
-                          <ComposedChart data={correlationData} margin={{ top: 10, right: 10, bottom: 0, left: 0 }}>
-                              <defs>
-                                  <linearGradient id="colorScore" x1="0" y1="0" x2="0" y2="1">
-                                      <stop offset="5%" stopColor={accentHex} stopOpacity={0.3}/>
-                                      <stop offset="95%" stopColor={accentHex} stopOpacity={0}/>
-                                  </linearGradient>
-                              </defs>
-                              <XAxis dataKey="dateLabel" hide />
-                              <YAxis hide domain={[0.5, 5.5]} />
-                              <Area type="monotone" dataKey="score" stroke={accentHex} strokeWidth={4} fillOpacity={1} fill="url(#colorScore)" />
-                              <Scatter dataKey="perfectScore" fill="#f59e0b" stroke="#fff" strokeWidth={2} />
-                          </ComposedChart>
-                      </ResponsiveContainer>
                   </div>
             </div>
           )}
