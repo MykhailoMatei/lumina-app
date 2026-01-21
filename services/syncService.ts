@@ -3,8 +3,8 @@ import { UserState, Goal, Habit, JournalEntry } from "../types";
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
 
 /**
- * Lumina Sync Service - Final Schema Alignment
- * Maps camelCase frontend types to the snake_case Supabase columns created via SQL.
+ * Lumina Sync Service - Schema Alignment
+ * Maps camelCase frontend types to the snake_case Supabase columns.
  */
 
 const mapHabitToDb = (h: Habit) => ({
@@ -14,13 +14,13 @@ const mapHabitToDb = (h: Habit) => ({
     description: h.description,
     duration: h.duration,
     time_of_day: h.timeOfDay,
-    days_of_week: h.daysOfWeek,
+    days_of_week: h.daysOfWeek || [],
     reminder_time: h.reminderTime,
     linked_goal_id: h.linkedGoalId,
-    streak: h.streak,
-    completed_dates: h.completedDates,
+    streak: h.streak || 0,
+    completed_dates: h.completedDates || [],
     created_at: h.createdAt,
-    last_updated: h.lastUpdated
+    last_updated: h.lastUpdated || Date.now()
 });
 
 const mapGoalToDb = (g: Goal) => ({
@@ -28,18 +28,18 @@ const mapGoalToDb = (g: Goal) => ({
     title: g.title,
     why_statement: g.whyStatement,
     category: g.category,
-    progress: g.progress,
+    progress: g.progress || 0,
     deadline: g.deadline,
-    completed: g.completed,
-    milestones: g.milestones,
-    is_paused: g.isPaused,
+    completed: g.completed || false,
+    milestones: g.milestones || [],
+    is_paused: g.isPaused || false,
     outcome_label: g.outcomeLabel,
     identity_impact: g.identityImpact,
     what_stayed: g.whatStayed,
     what_shifted: g.whatShifted,
     archived_at: g.archivedAt,
     start_date: g.startDate,
-    last_updated: g.lastUpdated
+    last_updated: g.lastUpdated || Date.now()
 });
 
 const mapEntryToDb = (e: JournalEntry) => ({
@@ -48,12 +48,12 @@ const mapEntryToDb = (e: JournalEntry) => ({
     content: e.content,
     prompt: e.prompt,
     mood: e.mood,
-    activities: e.activities,
+    activities: e.activities || [],
     ai_insight: e.aiInsight,
     linked_goal_id: e.linkedGoalId,
     linked_habit_id: e.linkedHabitId,
     image_data: e.imageData,
-    last_updated: e.lastUpdated
+    last_updated: e.lastUpdated || Date.now()
 });
 
 const mapFromDb = (item: any) => {
@@ -107,9 +107,9 @@ export const performCloudSync = async (localData: UserState): Promise<{ success:
         if (gErr || hErr || jErr) {
             const err = gErr || hErr || jErr;
             if (err?.message.includes("column") || err?.message.includes("cache")) {
-                throw new Error("Cloud Schema Mismatch: Please run the SQL Setup Script in your Supabase Dashboard to update your database columns.");
+                throw new Error("Schema Mismatch: Your database is missing columns. Run the ALTER TABLE script in Supabase.");
             }
-            throw new Error(`Sync Read Failed: ${err?.message}`);
+            throw new Error(`Cloud Read Failed: ${err?.message}`);
         }
 
         const sanitizeAndMap = <T extends object>(list: any[] | null): T[] => {
@@ -137,7 +137,10 @@ export const performCloudSync = async (localData: UserState): Promise<{ success:
         const findNewer = <T extends { id: string; lastUpdated?: number }>(localList: T[], remoteList: T[]) => {
             return localList.filter(local => {
                 const remote = remoteList.find(r => r.id === local.id);
-                return !remote || (Number(local.lastUpdated) || 0) > (Number(remote.lastUpdated) || 0);
+                // If remote doesn't exist, it's new. If local timestamp is higher, it's an update.
+                const localTS = Number(local.lastUpdated) || 0;
+                const remoteTS = remote ? (Number(remote.lastUpdated) || 0) : -1;
+                return localTS > remoteTS;
             });
         };
 
@@ -146,27 +149,41 @@ export const performCloudSync = async (localData: UserState): Promise<{ success:
         const habitsPush = findNewer(localData.habits, rHabits);
         const entriesPush = findNewer(localData.journalEntries, rEntries);
 
-        if (goalsPush.length > 0) pushPromises.push(supabase.from('goals').upsert(goalsPush.map(g => ({ ...mapGoalToDb(g), user_id: userId }))));
-        if (habitsPush.length > 0) pushPromises.push(supabase.from('habits').upsert(habitsPush.map(h => ({ ...mapHabitToDb(h), user_id: userId }))));
-        if (entriesPush.length > 0) pushPromises.push(supabase.from('journal_entries').upsert(entriesPush.map(e => ({ ...mapEntryToDb(e), user_id: userId }))));
+        if (goalsPush.length > 0) {
+            pushPromises.push(supabase.from('goals').upsert(
+                goalsPush.map(g => ({ ...mapGoalToDb(g), user_id: userId }))
+            ));
+        }
+        if (habitsPush.length > 0) {
+            pushPromises.push(supabase.from('habits').upsert(
+                habitsPush.map(h => ({ ...mapHabitToDb(h), user_id: userId }))
+            ));
+        }
+        if (entriesPush.length > 0) {
+            pushPromises.push(supabase.from('journal_entries').upsert(
+                entriesPush.map(e => ({ ...mapEntryToDb(e), user_id: userId }))
+            ));
+        }
 
         if (pushPromises.length > 0) {
             const pushResults = await Promise.all(pushPromises);
             const pushError = pushResults.find(r => r.error);
             if (pushError) {
                 if (pushError.error.message.includes("column")) {
-                    throw new Error("Cloud Write Failed: Your database is missing the 'completed_dates' column. Run the SQL script provided in documentation.");
+                    throw new Error("Cloud Write Failed: Missing 'completed_dates' column. Please run the SQL Patch in Supabase.");
                 }
                 throw pushError.error;
             }
         }
 
-        // 4. Merge Logic
+        // 4. Final Merge Logic
         const merge = <T extends { id: string; lastUpdated?: number }>(localList: T[], remoteList: T[]): T[] => {
             const map = new Map<string, T>();
             [...remoteList, ...localList].forEach(item => {
                 const existing = map.get(item.id);
-                if (!existing || (Number(item.lastUpdated) || 0) >= (Number(existing.lastUpdated) || 0)) {
+                const itemTS = Number(item.lastUpdated) || 0;
+                const existingTS = existing ? (Number(existing.lastUpdated) || 0) : -1;
+                if (!existing || itemTS >= existingTS) {
                     map.set(item.id, item);
                 }
             });
