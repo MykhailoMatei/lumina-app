@@ -3,11 +3,10 @@ import { UserState, Goal, Habit, JournalEntry } from "../types";
 import { supabase, isSupabaseConfigured } from "./supabaseClient";
 
 /**
- * Lumina Sync Service - Schema Alignment Edition
- * Specifically maps camelCase frontend types to snake_case Supabase columns.
+ * Lumina Sync Service - Final Schema Alignment
+ * Maps camelCase frontend types to the snake_case Supabase columns created via SQL.
  */
 
-// Explicit mapping for 'habits' table
 const mapHabitToDb = (h: Habit) => ({
     id: h.id,
     title: h.title,
@@ -24,7 +23,6 @@ const mapHabitToDb = (h: Habit) => ({
     last_updated: h.lastUpdated
 });
 
-// Explicit mapping for 'goals' table
 const mapGoalToDb = (g: Goal) => ({
     id: g.id,
     title: g.title,
@@ -44,7 +42,6 @@ const mapGoalToDb = (g: Goal) => ({
     last_updated: g.lastUpdated
 });
 
-// Explicit mapping for 'journal_entries' table
 const mapEntryToDb = (e: JournalEntry) => ({
     id: e.id,
     date: e.date,
@@ -59,7 +56,6 @@ const mapEntryToDb = (e: JournalEntry) => ({
     last_updated: e.lastUpdated
 });
 
-// Generic helper to convert snake_case keys back to camelCase for Frontend
 const mapFromDb = (item: any) => {
     const mapped: any = {};
     for (const key in item) {
@@ -73,20 +69,18 @@ const mapFromDb = (item: any) => {
 
 export const performCloudSync = async (localData: UserState): Promise<{ success: boolean; data?: Partial<UserState>; message: string }> => {
     if (!isSupabaseConfigured) {
-        return { success: false, message: "Supabase is not configured." };
+        return { success: false, message: "Supabase not configured." };
     }
 
     const { data: { session }, error: sessionError } = await supabase.auth.getSession();
     if (sessionError || !session?.user) {
-        return { success: false, message: "Not authenticated." };
+        return { success: false, message: "Not logged in." };
     }
 
     const userId = session.user.id;
 
     try {
-        console.log("Starting Lumina Cloud Sync with Explicit Mapping...");
-
-        // 1. Process Hard Deletions
+        // 1. Hard Deletions
         const deletePromises: any[] = [];
         if (localData.deletedIds?.goals?.length > 0) {
             deletePromises.push(supabase.from('goals').delete().in('id', localData.deletedIds.goals).eq('user_id', userId));
@@ -97,12 +91,9 @@ export const performCloudSync = async (localData: UserState): Promise<{ success:
         if (localData.deletedIds?.journalEntries?.length > 0) {
             deletePromises.push(supabase.from('journal_entries').delete().in('id', localData.deletedIds.journalEntries).eq('user_id', userId));
         }
-        
-        if (deletePromises.length > 0) {
-            await Promise.all(deletePromises);
-        }
+        if (deletePromises.length > 0) await Promise.all(deletePromises);
 
-        // 2. Fetch Remote State
+        // 2. Fetch Latest State
         const [
             { data: remoteGoals, error: gErr },
             { data: remoteHabits, error: hErr },
@@ -114,14 +105,16 @@ export const performCloudSync = async (localData: UserState): Promise<{ success:
         ]);
 
         if (gErr || hErr || jErr) {
-            throw new Error(`Sync Read Failure: ${gErr?.message || hErr?.message || jErr?.message}`);
+            const err = gErr || hErr || jErr;
+            if (err?.message.includes("column") || err?.message.includes("cache")) {
+                throw new Error("Cloud Schema Mismatch: Please run the SQL Setup Script in your Supabase Dashboard to update your database columns.");
+            }
+            throw new Error(`Sync Read Failed: ${err?.message}`);
         }
 
-        // Map remote data back to frontend
         const sanitizeAndMap = <T extends object>(list: any[] | null): T[] => {
             return (list || []).map(item => {
                 const mapped = mapFromDb(item);
-                // Ensure array fields are parsed if they came back as strings
                 const arrayFields = ['milestones', 'completedDates', 'daysOfWeek', 'activities'];
                 arrayFields.forEach(field => {
                     if (mapped[field]) {
@@ -148,32 +141,24 @@ export const performCloudSync = async (localData: UserState): Promise<{ success:
             });
         };
 
-        const goalsToPush = findNewer(localData.goals, rGoals);
-        const habitsToPush = findNewer(localData.habits, rHabits);
-        const entriesToPush = findNewer(localData.journalEntries, rEntries);
-
         const pushPromises: any[] = [];
-        
-        if (goalsToPush.length > 0) {
-            pushPromises.push(supabase.from('goals').upsert(
-                goalsToPush.map(g => ({ ...mapGoalToDb(g), user_id: userId }))
-            ));
-        }
-        if (habitsToPush.length > 0) {
-            pushPromises.push(supabase.from('habits').upsert(
-                habitsToPush.map(h => ({ ...mapHabitToDb(h), user_id: userId }))
-            ));
-        }
-        if (entriesToPush.length > 0) {
-            pushPromises.push(supabase.from('journal_entries').upsert(
-                entriesToPush.map(e => ({ ...mapEntryToDb(e), user_id: userId }))
-            ));
-        }
+        const goalsPush = findNewer(localData.goals, rGoals);
+        const habitsPush = findNewer(localData.habits, rHabits);
+        const entriesPush = findNewer(localData.journalEntries, rEntries);
+
+        if (goalsPush.length > 0) pushPromises.push(supabase.from('goals').upsert(goalsPush.map(g => ({ ...mapGoalToDb(g), user_id: userId }))));
+        if (habitsPush.length > 0) pushPromises.push(supabase.from('habits').upsert(habitsPush.map(h => ({ ...mapHabitToDb(h), user_id: userId }))));
+        if (entriesPush.length > 0) pushPromises.push(supabase.from('journal_entries').upsert(entriesPush.map(e => ({ ...mapEntryToDb(e), user_id: userId }))));
 
         if (pushPromises.length > 0) {
-            const results = await Promise.all(pushPromises);
-            const errors = results.filter(r => r.error);
-            if (errors.length > 0) throw errors[0].error;
+            const pushResults = await Promise.all(pushPromises);
+            const pushError = pushResults.find(r => r.error);
+            if (pushError) {
+                if (pushError.error.message.includes("column")) {
+                    throw new Error("Cloud Write Failed: Your database is missing the 'completed_dates' column. Run the SQL script provided in documentation.");
+                }
+                throw pushError.error;
+            }
         }
 
         // 4. Merge Logic
@@ -181,28 +166,25 @@ export const performCloudSync = async (localData: UserState): Promise<{ success:
             const map = new Map<string, T>();
             [...remoteList, ...localList].forEach(item => {
                 const existing = map.get(item.id);
-                const itemTime = Number(item.lastUpdated) || 0;
-                const existingTime = existing ? (Number(existing.lastUpdated) || 0) : -1;
-                if (!existing || itemTime >= existingTime) map.set(item.id, item);
+                if (!existing || (Number(item.lastUpdated) || 0) >= (Number(existing.lastUpdated) || 0)) {
+                    map.set(item.id, item);
+                }
             });
             return Array.from(map.values());
         };
 
         return {
             success: true,
-            message: "Sync complete.",
+            message: "Cloud Synchronized.",
             data: {
                 goals: merge(localData.goals, rGoals),
                 habits: merge(localData.habits, rHabits),
                 journalEntries: merge(localData.journalEntries, rEntries),
-                syncStatus: {
-                    lastSync: Date.now(),
-                    status: 'synced'
-                }
+                syncStatus: { lastSync: Date.now(), status: 'synced' }
             }
         };
     } catch (e: any) {
-        console.error("Lumina Cloud Sync Error:", e);
-        return { success: false, message: e.message || "Sync encountered an issue." };
+        console.error("Lumina Sync Detail:", e);
+        return { success: false, message: e.message || "Sync Error" };
     }
 };
