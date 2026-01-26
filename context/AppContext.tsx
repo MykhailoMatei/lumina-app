@@ -8,7 +8,7 @@ import { performCloudSync } from '../services/syncService';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 import { sendSystemNotification, requestNotificationPermission } from '../services/notificationService';
 
-export const APP_VERSION = '1.5.4-soothing';
+export const APP_VERSION = '1.5.5-modern';
 
 export const THEMES: Record<ThemeColor, any> = {
   indigo: { name: 'accent_indigo', primary: 'bg-indigo-600', text: 'text-indigo-600', secondary: 'bg-indigo-50 dark:bg-indigo-900/20', gradient: 'from-indigo-600 to-blue-600', ring: 'ring-indigo-500', border: 'border-indigo-100 dark:border-indigo-900/30' },
@@ -27,7 +27,7 @@ const BASE_TRANSLATIONS = {
   good_morning: 'Good Morning',
   good_afternoon: 'Good Afternoon',
   good_evening: 'Good Evening',
-  daily_wisdom: 'Daily Wisdom',
+  daily_wisdom: 'Strategic Insight',
   habit_rate: 'Habit Success',
   routine_desc: 'Your daily momentum',
   momentum_desc: 'Active growth paths',
@@ -240,7 +240,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (hour >= 5 && hour < 12) return { state: 'Morning', label: 'Sunrise Phase', headerGradient: 'from-amber-400 to-orange-500', appBg: 'bg-orange-50/30 dark:bg-slate-950', buttonStyle: 'bg-white/20 text-white', iconContrast: false };
     if (hour >= 12 && hour < 17) return { state: 'Day', label: 'Solar Zenith', headerGradient: 'from-blue-400 to-indigo-600', appBg: 'bg-indigo-50/30 dark:bg-slate-950', buttonStyle: 'bg-white/20 text-white', iconContrast: false };
     if (hour >= 17 && hour < 22) return { state: 'Evening', label: 'Golden Hour', headerGradient: 'from-rose-400 to-purple-600', appBg: 'bg-rose-50/30 dark:bg-slate-950', buttonStyle: 'bg-white/20 text-white', iconContrast: false };
-    // Night Cycle: Shifted to deep indigo and slate-950 for much softer contrast
     return { 
         state: 'Night', 
         label: 'Lunar Rest', 
@@ -251,7 +250,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     };
   }, []);
 
-  // AUTOMATIC THEME SWITCHER
   useEffect(() => {
     if (circadian.state === 'Night' && state.theme !== 'dark') {
         setState(s => ({ ...s, theme: 'dark' }));

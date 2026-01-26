@@ -8,7 +8,6 @@ const getAiClient = () => {
   return new GoogleGenAI({ apiKey: apiKey });
 };
 
-// Helper to clean AI response of markdown artifacts
 const cleanJsonResponse = (text: string): string => {
   return text.replace(/```json\n?/, '').replace(/```\n?$/, '').trim();
 };
@@ -19,11 +18,11 @@ const getLangInstr = (lang: AppLanguage) =>
 const GET_DAILY_FALLBACK = (lang: AppLanguage): DailyBriefing => {
   const fallbacks: DailyBriefing[] = [
     {
-      motivation: "Transformation is not a storm, but the steady falling of rain upon dry earth.",
-      focus: "Quiet Observation",
-      tip: "Move with intention, not with haste.",
-      journalPrompt: "Where did you find stillness today?",
-      priorityTask: "Perhaps invite a moment of quiet reflection into your current work."
+      motivation: "Consistency is the only variable within your direct control. Focus on the execution, not the outcome.",
+      focus: "Operational Efficiency",
+      tip: "Reduce friction in your environment to make your desired habits the default choice.",
+      journalPrompt: "What was the most effective choice you made today?",
+      priorityTask: "Audit your current workload and identify one high-leverage task to focus on."
     }
   ];
   return fallbacks[0];
@@ -48,32 +47,24 @@ export const generateGrowthAudit = async (
     const ai = getAiClient();
     const isEarlyStage = goals.length <= 1 && habits.length === 0 && journal.length === 0;
     
-    const now = new Date();
-    const todayStr = now.toISOString().split('T')[0];
-    
-    const habitData = habits.length > 0 ? habits.map(h => {
-        const isCompletedToday = h.completedDates.includes(todayStr);
-        return `- ${h.title}: ${isCompletedToday ? "Recorded" : "Awaiting"}.`;
-    }).join('\n') : "The path is currently clear.";
-
     const prompt = `${getLangInstr(lang)} 
-    You are the "Lumina Sage." Your persona is: Wise, Patient, Minimalist, and Profound.
+    You are the "Lumina Growth Architect." You are a practical, high-performance coach.
     
     COACHING PHILOSOPHY:
-    1. AVOID: Casual greetings, exclamation marks, or "Hey/Hi."
-    2. INDEPENDENCE: Rituals are individual stars. Missing one does not dim the others.
-    3. LANGUAGE: Use grounded metaphors (roots, seasons, rivers).
-    4. FOCUS: Highlight the quiet strength in what the user *did* do.
+    1. AVOID: Ancient metaphors (mountains, rivers, monks, roots). 
+    2. VOICE: Intelligent, grounded in behavioral psychology, and actionable.
+    3. FOCUS: Systems over willpower. Environment over motivation.
+    4. STYLE: Minimalist, kind, but focused on data and trends.
 
     JSON OUTPUT:
     {
-      "summary": "A calm observation of the day's movement.",
-      "correlation": "A subtle link between actions, framed as a pattern rather than a dependency.",
-      "advice": "A gentle invitation to find balance.",
-      "trajectory": "A vision of the path ahead.",
-      "archetype": "Quiet Architect",
-      "happinessTrigger": "One specific moment of alignment the user should acknowledge.",
-      "mentalThemes": ["Patience", "Clarity", "Presence"],
+      "summary": "Observation of current momentum and cognitive load.",
+      "correlation": "A link between daily systems and long-term targets.",
+      "advice": "Actionable adjustment based on behavioral science.",
+      "trajectory": "The logical next step in the user's evolution.",
+      "archetype": "Strategic Planner",
+      "happinessTrigger": "One specific win the user should leverage.",
+      "mentalThemes": ["Momentum", "Cognitive Load", "Systems"],
       "identityScores": [
           {"subject": "Health", "A": 50, "fullMark": 100},
           {"subject": "Career", "A": 50, "fullMark": 100},
@@ -94,23 +85,22 @@ export const generateGrowthAudit = async (
         const parsed = JSON.parse(cleanJsonResponse(res.text || "{}"));
         return { ...parsed, isCalibrating: parsed.isCalibrating ?? isEarlyStage };
     } catch (e) {
-        return { summary: "The rhythm of growth is steady.", correlation: "Patterns are emerging.", advice: "Trust your pace.", trajectory: "Forward, always.", happinessTrigger: "Your awareness is your compass.", mentalThemes: ["Presence"], identityScores: [], archetype: "Pathfinder", isCalibrating: true };
+        return { summary: "Data patterns are stabilizing.", correlation: "Identifying leverage points.", advice: "Stick to the schedule.", trajectory: "Incremental progress.", happinessTrigger: "Your routine is your foundation.", mentalThemes: ["Consistency"], identityScores: [], archetype: "Systems Builder", isCalibrating: true };
     }
 };
 
 export const generateDailyBriefing = async (name: string, goals: Goal[], habits: Habit[], recentJournal: JournalEntry[], lang: AppLanguage): Promise<DailyBriefing> => {
   const ai = getAiClient();
-  const now = new Date();
   
   const prompt = `${getLangInstr(lang)} 
-    You are a Wise Mentor. Your voice is calm, thoughtful, and minimalist.
+    You are a Modern Growth Mentor. Your voice is grounded, practical, and focuses on behavioral science.
     
     STRICT RULES:
-    1. NO INFORMAL GREETINGS: Do not use "Hey," "Hi," "I was thinking about you," or "Wanted to say."
-    2. START DIRECTLY: Begin the 'motivation' with an observation or a timeless truth.
-    3. NO EXCLAMATION MARKS: Keep the energy low, steady, and profound.
-    4. KEYSTONE TASK ('priorityTask'): Frame it as a "Gentle Invitation." Use phrases like "Perhaps find space for...", "There is an opportunity to...", "You might enjoy tending to...".
-    5. FOCUS: The 'motivation' should feel like a line from a meditation, not a chat message.
+    1. NO ARCHAIC METAPHORS: Never use mountains, rivers, flowers, or ancient wisdom.
+    2. MODERN TONE: Use terms like 'friction', 'cognitive load', 'systems', 'leverage', and 'momentum'.
+    3. NO INFORMAL GREETINGS: Do not use "Hey," "Hi," or "I was thinking." Start with the insight.
+    4. ACTION-ORIENTED: The 'motivation' should be a practical truth about personal growth or psychology.
+    5. KEYSTONE TASK ('priorityTask'): Frame it as a 'High-Leverage Invitation'.
 
     JSON: { motivation, focus, tip, journal_prompt, priorityTask }.`;
 
@@ -122,11 +112,11 @@ export const generateDailyBriefing = async (name: string, goals: Goal[], habits:
     });
     const data = JSON.parse(cleanJsonResponse(response.text || "{}"));
     return {
-      motivation: data.motivation || "The ocean does not hurry, yet all things are accomplished.",
-      focus: data.focus || "Internal Alignment",
-      tip: data.tip || "Allow your breath to find its natural depth.",
-      journalPrompt: data.journal_prompt || "Where did you find clarity today?",
-      priorityTask: data.priorityTask || "Perhaps find a few moments to sit with your current intentions."
+      motivation: data.motivation || "Success is the product of daily systems, not once-in-a-lifetime transformations.",
+      focus: data.focus || "System Integrity",
+      tip: data.tip || "Identify the point of greatest friction in your routine and resolve it.",
+      journalPrompt: data.journal_prompt || "What choice today saved you time or energy?",
+      priorityTask: data.priorityTask || "Audit your current queue and eliminate one non-essential task."
     };
   } catch (err) {
     return GET_DAILY_FALLBACK(lang);
@@ -143,16 +133,16 @@ export const testApiConnection = async () => {
 
 export const suggestAtomicHabit = async (habitTitle: string, lang: AppLanguage) => {
   const ai = getAiClient();
-  const prompt = `${getLangInstr(lang)} Tiny habit for: "${habitTitle}". JSON: { suggestion, reason }.`;
+  const prompt = `${getLangInstr(lang)} Suggest a high-leverage version of: "${habitTitle}". JSON: { suggestion, reason }.`;
   try {
     const res = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt, config: { responseMimeType: "application/json" } });
     return JSON.parse(cleanJsonResponse(res.text || "{}"));
-  } catch { return { suggestion: habitTitle, reason: "Small steps." }; }
+  } catch { return { suggestion: habitTitle, reason: "Consistency over intensity." }; }
 };
 
 export const generateMilestonesForGoal = async (goalTitle: string, lang: AppLanguage) => {
   const ai = getAiClient();
-  const prompt = `${getLangInstr(lang)} 5 milestones for "${goalTitle}". JSON array of strings.`;
+  const prompt = `${getLangInstr(lang)} 5 strategic milestones for "${goalTitle}". JSON array of strings.`;
   try {
     const res = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: prompt, config: { responseMimeType: "application/json" } });
     return JSON.parse(cleanJsonResponse(res.text || "[]"));
@@ -170,10 +160,10 @@ export const translateContent = async (title: string, content: string, lang: App
 
 export const generateEntryInsight = async (content: string, mood: string, goalTitle: string | null, habitTitle: string | null, imageData: string | null, lang: AppLanguage) => {
   const ai = getAiClient();
-  const parts: any[] = [{ text: `${getLangInstr(lang)} Sage insight. PERSONA: Observant and deep. JSON: { insight } Content: ${content}` }];
+  const parts: any[] = [{ text: `${getLangInstr(lang)} Strategic growth insight based on this reflection. Avoid archaic wisdom. Focus on psychology. JSON: { insight } Content: ${content}` }];
   if (imageData) parts.push({ inlineData: { data: imageData.split(',')[1], mimeType: imageData.split(';')[0].split(':')[1] } });
   try {
     const res = await ai.models.generateContent({ model: 'gemini-3-flash-preview', contents: { parts }, config: { responseMimeType: "application/json" } });
-    return JSON.parse(cleanJsonResponse(res.text || "{}")).insight || "The narrative of your life is written in your reflections.";
-  } catch { return "Reflection is the mirror of the soul."; }
+    return JSON.parse(cleanJsonResponse(res.text || "{}")).insight || "Your patterns reflect your priorities. Alignment is an ongoing practice.";
+  } catch { return "Execution is the best form of reflection."; }
 };
