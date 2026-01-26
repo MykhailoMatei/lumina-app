@@ -30,7 +30,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
         updateUserPreferences, circadian, syncStatus, user
     } = useApp();
     
-    // Reactive Today State: Handles date turnover while app is in memory
     const [currentTodayStr, setCurrentTodayStr] = useState(getTodayString());
     const [selectedDate, setSelectedDate] = useState(currentTodayStr);
     
@@ -40,23 +39,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
     const [editingHabitId, setEditingHabitId] = useState<string | null>(null);
     const [isRefreshing, setIsRefreshing] = useState(false);
 
-    // Heartbeat to detect midnight turnover
     useEffect(() => {
         const interval = setInterval(() => {
             const freshToday = getTodayString();
             if (freshToday !== currentTodayStr) {
-                console.log("Date turnover detected. Refreshing momentum ribbon...");
                 setCurrentTodayStr(freshToday);
-                // Optionally move user to the new 'Today' if they were looking at the old 'Today'
                 if (selectedDate === currentTodayStr) {
                     setSelectedDate(freshToday);
                 }
             }
-        }, 30000); // Check every 30 seconds
+        }, 30000);
         return () => clearInterval(interval);
     }, [currentTodayStr, selectedDate]);
 
-    // Generate last 7 days for the Momentum Ribbon
     const momentumDays = useMemo(() => {
         const days: MomentumDay[] = [];
         const baseDate = new Date();
@@ -85,7 +80,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
     
     const [activeHabitTab, setActiveHabitTab] = useState<'Morning' | 'Afternoon' | 'Evening' | 'Anytime'>(initialTab);
 
-    // Habit Form State
     const [habitTitle, setHabitTitle] = useState('');
     const [habitTrigger, setHabitTrigger] = useState('');
     const [habitDuration, setHabitDuration] = useState('5m');
@@ -94,11 +88,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
     const [isAtomizing, setIsAtomizing] = useState(false);
     const [habitDays, setHabitDays] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
 
-    /**
-     * HISTORICAL & RECURRENCE FILTERING LOGIC
-     * 1. Check if habit was created on/before selectedDate
-     * 2. Check if selectedDate's day of week is in h.daysOfWeek
-     */
     const getHabitsForSelectedDate = useCallback(() => {
         const d = new Date(selectedDate);
         const dayOfWeek = d.getDay();
@@ -242,6 +231,60 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
         );
     };
 
+    /**
+     * Renders the header state (CTA or Status Label)
+     */
+    const renderHeaderStatus = () => {
+        if (nextAction) {
+            return (
+                <button 
+                    onClick={() => toggleHabitCompletion(nextAction.id, selectedDate)}
+                    className={`w-full ${circadian.buttonStyle} rounded-[2rem] p-4 flex items-center justify-between active:scale-[0.97] transition-all group overflow-hidden border border-white/10`}
+                >
+                    <div className="flex items-center gap-3">
+                        <div className={`p-2 rounded-xl group-hover:scale-110 transition-transform ${circadian.iconContrast ? themeClasses.secondary + ' ' + themeClasses.text : 'bg-white/10 text-white'}`}>
+                            <Play size={16} fill="currentColor" />
+                        </div>
+                        <div className="text-left">
+                            <p className="text-[8px] font-black uppercase tracking-[0.15em] opacity-40">
+                                {selectedDate === currentTodayStr ? 'START ROUTINE' : 'BACKDATE COMPLETION'}
+                            </p>
+                            <h4 className={`text-sm font-black truncate max-w-[180px] ${circadian.state === 'Night' ? 'text-slate-200' : 'text-white'}`}>
+                                {nextAction.title} <span className="opacity-40 ml-1 text-[10px]">({nextAction.duration || '5m'})</span>
+                            </h4>
+                        </div>
+                    </div>
+                    <ArrowRight size={18} className="opacity-40 group-hover:translate-x-1 transition-transform" />
+                </button>
+            );
+        }
+
+        if (habits.length === 0) {
+            return (
+                <div className="w-full bg-white/5 backdrop-blur-md rounded-[2rem] p-4 flex items-center justify-center text-white/50 border border-white/5">
+                    <span className="text-xs font-black uppercase tracking-widest opacity-40 italic">Waiting for your first ritual</span>
+                </div>
+            );
+        }
+
+        if (habitsForDay.length === 0) {
+            const dayName = new Date(selectedDate).toLocaleDateString(undefined, { weekday: 'long' });
+            return (
+                <div className="w-full bg-white/5 backdrop-blur-md rounded-[2rem] p-4 flex items-center justify-center text-white/50 border border-white/5">
+                    <Calendar className="mr-2 opacity-30" size={14} />
+                    <span className="text-xs font-black uppercase tracking-widest opacity-40">No rituals scheduled for {dayName}</span>
+                </div>
+            );
+        }
+
+        return (
+            <div className="w-full bg-white/5 backdrop-blur-md rounded-[2rem] p-4 flex items-center justify-center text-white/50 border border-white/5">
+                <Check className="mr-2 opacity-30" size={16} strokeWidth={3} />
+                <span className="text-xs font-black uppercase tracking-widest opacity-40">Rituals Complete</span>
+            </div>
+        );
+    };
+
     return (
         <>
             <div className="pb-32 space-y-6 animate-in fade-in duration-700">
@@ -276,43 +319,18 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                     </button>
 
                     <div className="space-y-4 relative z-10">
-                        <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-50 text-white">{circadian.label}</p>
-                        <h1 className="text-3xl font-black text-white tracking-tighter pr-16">
+                        <p className={`text-[10px] font-black uppercase tracking-[0.3em] ${circadian.state === 'Night' ? 'opacity-30' : 'opacity-50'} text-white`}>{circadian.label}</p>
+                        <h1 className={`text-3xl font-black tracking-tighter pr-16 ${circadian.state === 'Night' ? 'text-slate-200' : 'text-white'}`}>
                             {currentHour < 12 ? t('good_morning') : currentHour < 18 ? t('good_afternoon') : t('good_evening')}, {name.split(' ')[0]}
                         </h1>
 
-                        {nextAction ? (
-                            <button 
-                                onClick={() => toggleHabitCompletion(nextAction.id, selectedDate)}
-                                className={`w-full ${circadian.buttonStyle} rounded-[2rem] p-4 flex items-center justify-between active:scale-[0.97] transition-all group overflow-hidden border border-white/10`}
-                            >
-                                <div className="flex items-center gap-3">
-                                    <div className={`p-2 rounded-xl group-hover:scale-110 transition-transform ${circadian.iconContrast ? themeClasses.secondary + ' ' + themeClasses.text : 'bg-white/10 text-white'}`}>
-                                        <Play size={16} fill="currentColor" />
-                                    </div>
-                                    <div className="text-left">
-                                        <p className="text-[8px] font-black uppercase tracking-[0.15em] opacity-40">
-                                            {selectedDate === currentTodayStr ? 'START ROUTINE' : 'BACKDATE COMPLETION'}
-                                        </p>
-                                        <h4 className="text-sm font-black truncate max-w-[180px]">
-                                            {nextAction.title} <span className="opacity-40 ml-1 text-[10px]">({nextAction.duration || '5m'})</span>
-                                        </h4>
-                                    </div>
-                                </div>
-                                <ArrowRight size={18} className="opacity-40 group-hover:translate-x-1 transition-transform" />
-                            </button>
-                        ) : (
-                            <div className="w-full bg-white/5 backdrop-blur-md rounded-[2rem] p-4 flex items-center justify-center text-white/50 border border-white/5">
-                                <Check className="mr-2" size={16} strokeWidth={3} />
-                                <span className="text-xs font-black uppercase tracking-widest">Rituals Complete</span>
-                            </div>
-                        )}
+                        {renderHeaderStatus()}
                         
                         {dailyBriefing && (
-                            <div onClick={() => setIsBriefingExpanded(!isBriefingExpanded)} className="bg-black/20 backdrop-blur-xl border border-white/5 rounded-[2.5rem] p-5 cursor-pointer hover:bg-black/30 transition-all group/briefing shadow-inner">
-                                <div className="flex justify-between items-center opacity-60 mb-2">
-                                    <span className="text-[9px] font-black uppercase tracking-widest text-white flex items-center gap-2">
-                                        <Sparkles size={12} className={isRefreshing ? 'animate-spin' : ''} /> {t('daily_wisdom')}
+                            <div onClick={() => setIsBriefingExpanded(!isBriefingExpanded)} className="bg-black/20 backdrop-blur-xl border border-white/5 rounded-[2.5rem] p-6 cursor-pointer hover:bg-black/30 transition-all group/briefing shadow-inner relative">
+                                <div className="flex justify-between items-center opacity-40 mb-3">
+                                    <span className="text-[9px] font-black uppercase tracking-[0.25em] text-white flex items-center gap-2">
+                                        <Sparkles size={12} /> {t('daily_wisdom')}
                                     </span>
                                     <div className="flex items-center gap-3 text-white">
                                         <button 
@@ -326,19 +344,19 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                     </div>
                                 </div>
                                 <div className="relative">
-                                    <p className={`text-white/90 font-bold text-sm italic leading-snug transition-opacity duration-300 ${isRefreshing ? 'opacity-30' : 'opacity-100'} ${isBriefingExpanded ? '' : 'line-clamp-1'}`}>
+                                    <p className={`font-bold text-[15px] leading-relaxed transition-opacity duration-300 ${isRefreshing ? 'opacity-30' : 'opacity-100'} ${circadian.state === 'Night' ? 'text-slate-300' : 'text-white/95'} ${isBriefingExpanded ? '' : 'line-clamp-2'}`}>
                                         "{dailyBriefing.motivation}"
                                     </p>
                                 </div>
                                 {isBriefingExpanded && (
-                                    <div className="grid grid-cols-2 gap-3 mt-4 animate-in zoom-in-95">
-                                        <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
-                                            <h3 className="text-[8px] font-black uppercase opacity-40 text-white mb-1">Focus</h3>
-                                            <p className="text-xs font-bold text-white/90">{dailyBriefing.focus}</p>
+                                    <div className="grid grid-cols-2 gap-4 mt-6 animate-in slide-in-from-top-2">
+                                        <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+                                            <h3 className="text-[8px] font-black uppercase opacity-40 text-white mb-2 tracking-widest">Focus</h3>
+                                            <p className={`text-[11px] font-bold ${circadian.state === 'Night' ? 'text-slate-400' : 'text-white/90'}`}>{dailyBriefing.focus}</p>
                                         </div>
-                                        <div className="bg-white/5 rounded-2xl p-3 border border-white/5">
-                                            <h3 className="text-[8px] font-black uppercase opacity-40 text-white mb-1">Action</h3>
-                                            <p className="text-xs font-bold text-white/90">{dailyBriefing.tip}</p>
+                                        <div className="bg-white/5 rounded-2xl p-4 border border-white/5">
+                                            <h3 className="text-[8px] font-black uppercase opacity-40 text-white mb-2 tracking-widest">Action</h3>
+                                            <p className={`text-[11px] font-bold ${circadian.state === 'Night' ? 'text-slate-400' : 'text-white/90'}`}>{dailyBriefing.tip}</p>
                                         </div>
                                     </div>
                                 )}
@@ -349,20 +367,20 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
 
                 {/* KEYSTONE TASK */}
                 {dailyBriefing?.priorityTask && (
-                    <div className={`bg-white dark:bg-slate-900 p-6 rounded-[2.5rem] border-2 ${themeClasses.border} animate-in slide-in-from-bottom-4 duration-500 group/keystone relative overflow-hidden shadow-sm`}>
-                        <div className="flex items-center justify-between mb-3">
+                    <div className={`bg-white dark:bg-slate-900 p-8 rounded-[2.5rem] border-2 ${themeClasses.border} animate-in slide-in-from-bottom-4 duration-500 group/keystone relative overflow-hidden shadow-sm`}>
+                        <div className="flex items-center justify-between mb-4">
                             <div className="flex items-center gap-3">
-                                <div className={`w-8 h-8 rounded-full ${themeClasses.primary} flex items-center justify-center text-white shadow-lg`}><Zap size={16} /></div>
-                                <h2 className="text-[10px] font-black uppercase tracking-widest text-slate-400">{t('keystone')}</h2>
+                                <div className={`w-9 h-9 rounded-xl ${themeClasses.primary} flex items-center justify-center text-white shadow-lg`}><Zap size={18} /></div>
+                                <h2 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400">{t('keystone')}</h2>
                             </div>
-                            <span className="text-[8px] font-bold text-slate-300 uppercase">
+                            <span className="text-[9px] font-bold text-slate-300 uppercase tracking-widest">
                                 {new Date(selectedDate).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
                             </span>
                         </div>
-                        <p className={`text-[15px] font-bold text-slate-700 dark:text-slate-200 leading-snug mb-4 transition-opacity ${isRefreshing ? 'opacity-30' : 'opacity-100'}`}>
+                        <p className={`text-lg font-bold text-slate-800 dark:text-slate-100 leading-tight mb-6 transition-opacity ${isRefreshing ? 'opacity-30' : 'opacity-100'}`}>
                             {dailyBriefing.priorityTask}
                         </p>
-                        <div className="h-1.5 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
+                        <div className="h-2 w-full bg-slate-100 dark:bg-slate-800 rounded-full overflow-hidden">
                             <div className={`h-full ${themeClasses.primary} transition-all duration-1000`} style={{ width: `${progress}%` }} />
                         </div>
                     </div>
@@ -401,7 +419,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                             <div className="flex justify-start gap-4 overflow-x-auto no-scrollbar py-1 px-1 snap-x pr-10">
                                 {momentumDays.map((day) => {
                                     const isSelected = selectedDate === day.full;
-                                    // Accurate check for that specific date in the past
                                     const activeHabitsForDay = habits.filter(h => 
                                         h.createdAt.split('T')[0] <= day.full && 
                                         h.daysOfWeek.includes(day.dayOfWeek)
@@ -526,7 +543,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                     </div>
                 </div>
 
-                {/* HUMANIZED METRICS OVERVIEW */}
                 <div className="grid grid-cols-2 gap-4">
                     <div onClick={() => setView('insights')} className="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 cursor-pointer active:scale-95 transition-all flex flex-col gap-3 shadow-sm hover:shadow-md">
                         <div className="flex justify-between items-start">
@@ -555,7 +571,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                 </div>
             </div>
 
-            {/* CREATE/EDIT HABIT MODAL */}
             {showHabitModal && (
                 <div className="fixed inset-0 z-[100] flex items-center justify-center animate-in fade-in duration-300">
                     <div 
@@ -608,7 +623,6 @@ export const Dashboard: React.FC<DashboardProps> = ({ setView }) => {
                                         </div>
                                     </div>
 
-                                    {/* DAY FREQUENCY SELECTOR */}
                                     <div className="space-y-3 pt-2">
                                         <div className="flex justify-between items-center px-1">
                                             <label className="text-[8px] font-black uppercase text-slate-400 tracking-[0.2em]">Frequency</label>

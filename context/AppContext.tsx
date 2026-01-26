@@ -8,7 +8,7 @@ import { performCloudSync } from '../services/syncService';
 import { supabase, isSupabaseConfigured } from '../services/supabaseClient';
 import { sendSystemNotification, requestNotificationPermission } from '../services/notificationService';
 
-export const APP_VERSION = '1.5.3-stable';
+export const APP_VERSION = '1.5.4-soothing';
 
 export const THEMES: Record<ThemeColor, any> = {
   indigo: { name: 'accent_indigo', primary: 'bg-indigo-600', text: 'text-indigo-600', secondary: 'bg-indigo-50 dark:bg-indigo-900/20', gradient: 'from-indigo-600 to-blue-600', ring: 'ring-indigo-500', border: 'border-indigo-100 dark:border-indigo-900/30' },
@@ -190,11 +190,10 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
     if (saved) {
       try {
         const parsed = JSON.parse(saved);
-        // Data Integrity Migration: Ensure all habits have createdAt and daysOfWeek
         const habits = (parsed.habits || []).map((h: any) => ({
           ...h,
           createdAt: h.createdAt || new Date().toISOString(),
-          daysOfWeek: h.daysOfWeek || [0, 1, 2, 3, 4, 5, 6] // Default to daily if missing
+          daysOfWeek: h.daysOfWeek || [0, 1, 2, 3, 4, 5, 6] 
         }));
         
         return {
@@ -223,7 +222,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
           }
         };
       } catch (e) {
-        console.error("Failed to parse saved state, using defaults", e);
         return defaultState;
       }
     }
@@ -237,7 +235,29 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   const syncTimeoutRef = useRef<number | null>(null);
   const lastCheckedMinute = useRef<string | null>(null);
 
-  // ROUTINE TIMELINE CHECKER
+  const circadian = useMemo(() => {
+    const hour = new Date().getHours();
+    if (hour >= 5 && hour < 12) return { state: 'Morning', label: 'Sunrise Phase', headerGradient: 'from-amber-400 to-orange-500', appBg: 'bg-orange-50/30 dark:bg-slate-950', buttonStyle: 'bg-white/20 text-white', iconContrast: false };
+    if (hour >= 12 && hour < 17) return { state: 'Day', label: 'Solar Zenith', headerGradient: 'from-blue-400 to-indigo-600', appBg: 'bg-indigo-50/30 dark:bg-slate-950', buttonStyle: 'bg-white/20 text-white', iconContrast: false };
+    if (hour >= 17 && hour < 22) return { state: 'Evening', label: 'Golden Hour', headerGradient: 'from-rose-400 to-purple-600', appBg: 'bg-rose-50/30 dark:bg-slate-950', buttonStyle: 'bg-white/20 text-white', iconContrast: false };
+    // Night Cycle: Shifted to deep indigo and slate-950 for much softer contrast
+    return { 
+        state: 'Night', 
+        label: 'Lunar Rest', 
+        headerGradient: 'from-indigo-950/40 via-slate-900 to-slate-950', 
+        appBg: 'bg-slate-950', 
+        buttonStyle: 'bg-white/5 text-slate-300', 
+        iconContrast: false 
+    };
+  }, []);
+
+  // AUTOMATIC THEME SWITCHER
+  useEffect(() => {
+    if (circadian.state === 'Night' && state.theme !== 'dark') {
+        setState(s => ({ ...s, theme: 'dark' }));
+    }
+  }, [circadian.state]);
+
   useEffect(() => {
     const interval = setInterval(() => {
       const now = new Date();
@@ -255,7 +275,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
 
       phases.forEach(phase => {
         if (routineTimeline[phase] === timeStr) {
-          // Updated: Only nudge if the ritual is scheduled for TODAY
           const habitsToNudge = state.habits.filter(h => 
             h.timeOfDay === phase && 
             h.daysOfWeek.includes(todayDayNum) &&
@@ -324,14 +343,6 @@ export const AppProvider: React.FC<{ children: ReactNode }> = ({ children }) => 
   }, [state.language]);
 
   const themeClasses = useMemo(() => THEMES[state.themeColor], [state.themeColor]);
-
-  const circadian = useMemo(() => {
-    const hour = new Date().getHours();
-    if (hour >= 5 && hour < 12) return { state: 'Morning', label: 'Sunrise Phase', headerGradient: 'from-amber-400 to-orange-500', appBg: 'bg-orange-50/30 dark:bg-slate-950', buttonStyle: 'bg-white/20 text-white', iconContrast: false };
-    if (hour >= 12 && hour < 17) return { state: 'Day', label: 'Solar Zenith', headerGradient: 'from-blue-400 to-indigo-600', appBg: 'bg-indigo-50/30 dark:bg-slate-950', buttonStyle: 'bg-white/20 text-white', iconContrast: false };
-    if (hour >= 17 && hour < 22) return { state: 'Evening', label: 'Golden Hour', headerGradient: 'from-rose-400 to-purple-600', appBg: 'bg-rose-50/30 dark:bg-slate-950', buttonStyle: 'bg-white/20 text-white', iconContrast: false };
-    return { state: 'Night', label: 'Lunar Rest', headerGradient: 'from-slate-800 to-slate-950', appBg: 'bg-slate-900 dark:bg-slate-950', buttonStyle: 'bg-white/10 text-white', iconContrast: false };
-  }, []);
 
   const addGoal = (goal: Goal) => {
     const newState = { ...state, goals: [{ ...goal, lastUpdated: Date.now() }, ...state.goals] };
